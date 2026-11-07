@@ -1,639 +1,291 @@
 let appData = null;
 let monthlyChart = null;
-
 let currentPage = "overview";
 let currentChannel = "all";
-let currentDateRange = "7";
+let currentDateRange = "2025"; // Default langsung menampilkan Tahun 2025
 let supabaseClient = null;
 let supabaseDataClient = null;
-let activeDataSource = "none";
-let dailyAggregationCache = null;
 
-const SUPABASE_URL = "https://tyjgxjawjqwerwemzkhy.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR5amd4amF3anF3ZXJ3ZW16a2h5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNDM1NDIsImV4cCI6MjA5NDkxOTU0Mn0.yDYRxuK0Mw-Ny-etoULGEXczXlKpdP5M2YVsouDi5y0";
-
-const CHANNEL_TRAFFIC_KEYS = {
-  "Google Ads": "google_ads",
-  Instagram: "instagram",
-  "Twitter/X": "twitter_x",
-  Website: "website"
-};
+const SUPABASE_URL = "https://htjqavjtldidioumraxm.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_rzGMjGk5gBVdy3NNxsxOcA_42_GjQwo";
 
 /* ================= ELEMENTS ================= */
 const registerPage = document.getElementById("registerPage");
 const loginPage = document.getElementById("loginPage");
 const dashboardPage = document.getElementById("dashboardPage");
 const app = document.getElementById("app");
-
 const registerForm = document.getElementById("registerForm");
 const loginForm = document.getElementById("loginForm");
-
 const goToLogin = document.getElementById("goToLogin");
 const goToRegister = document.getElementById("goToRegister");
 const logoutButton = document.getElementById("logoutButton");
-
 const channelFilter = document.getElementById("channelFilter");
 const dateFilter = document.getElementById("dateFilter");
 
-/* ================= PAGE SWITCHING ================= */
+/* ================= PAGE SWITCHING & HELPERS ================= */
 function showRegisterPage() {
-  registerPage.classList.remove("hidden");
-  loginPage.classList.add("hidden");
-  dashboardPage.classList.add("hidden");
+  if (registerPage) registerPage.classList.remove("hidden");
+  if (loginPage) loginPage.classList.add("hidden");
+  if (dashboardPage) dashboardPage.classList.add("hidden");
 }
 
 function showLoginPage() {
-  registerPage.classList.add("hidden");
-  loginPage.classList.remove("hidden");
-  dashboardPage.classList.add("hidden");
+  if (registerPage) registerPage.classList.add("hidden");
+  if (loginPage) loginPage.classList.remove("hidden");
+  if (dashboardPage) dashboardPage.classList.add("hidden");
 }
 
 function showDashboardPage() {
-  registerPage.classList.add("hidden");
-  loginPage.classList.add("hidden");
-  dashboardPage.classList.remove("hidden");
-
+  if (registerPage) registerPage.classList.add("hidden");
+  if (loginPage) loginPage.classList.add("hidden");
+  if (dashboardPage) dashboardPage.classList.remove("hidden");
+  if (dateFilter) dateFilter.value = currentDateRange;
   fetchEduFunnelData();
-}
-
-function createSupabaseClient() {
-  if (!window.supabase || !window.supabase.createClient) {
-    throw new Error("Supabase client belum dimuat.");
-  }
-
-  if (!supabaseClient) {
-    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: {
-        fetch: function (url, options = {}) {
-          return fetch(url, {
-            ...options,
-            cache: "no-store"
-          });
-        }
-      }
-    });
-  }
-
-  return supabaseClient;
-}
-
-function createSupabaseDataClient() {
-  if (!window.supabase || !window.supabase.createClient) {
-    throw new Error("Supabase client belum dimuat.");
-  }
-
-  if (!supabaseDataClient) {
-    supabaseDataClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUrl: false,
-        storageKey: "edufunnel-anon-data-client"
-      },
-      global: {
-        fetch: function (url, options = {}) {
-          return fetch(url, {
-            ...options,
-            cache: "no-store"
-          });
-        }
-      }
-    });
-  }
-
-  return supabaseDataClient;
 }
 
 function setButtonLoading(button, isLoading, loadingText) {
   if (!button) return;
-
   if (isLoading) {
     button.dataset.defaultText = button.textContent;
     button.textContent = loadingText;
     button.disabled = true;
     return;
   }
-
   button.textContent = button.dataset.defaultText || button.textContent;
   button.disabled = false;
 }
 
-async function getCurrentSupabaseUser() {
-  const client = createSupabaseClient();
-  const { data, error } = await client.auth.getUser();
-
-  if (error) return null;
-
-  return data.user || null;
+function createSupabaseClient() {
+  if (!window.supabase || !window.supabase.createClient) {
+    throw new Error("Supabase client belum dimuat.");
+  }
+  if (!supabaseClient) {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+  return supabaseClient;
 }
 
-/* ================= AUTH ================= */
-goToLogin.addEventListener("click", showLoginPage);
-goToRegister.addEventListener("click", showRegisterPage);
+/* ================= AUTH (REGISTER, LOGIN ADMIN/USER & LOGOUT) ================= */
+if (goToLogin) goToLogin.addEventListener("click", showLoginPage);
+if (goToRegister) goToRegister.addEventListener("click", showRegisterPage);
 
-registerForm.addEventListener("submit", async function (event) {
-  event.preventDefault();
+// 1. Form Pendaftaran Pengguna Biasa
+if (registerForm) {
+  registerForm.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    const nameEl = document.getElementById("registerName");
+    const name = nameEl ? nameEl.value.trim() : "";
+    const email = document.getElementById("registerEmail").value.trim();
+    const password = document.getElementById("registerPassword").value;
+    const confirmPasswordEl = document.getElementById("confirmPassword");
+    const submitBtn = registerForm.querySelector("button[type='submit']");
 
-  const name = document.getElementById("registerName").value.trim();
-  const email = document.getElementById("registerEmail").value.trim();
-  const password = document.getElementById("registerPassword").value;
-  const confirmPassword = document.getElementById("confirmPassword").value;
-  const submitButton = registerForm.querySelector("button[type='submit']");
-
-  if (password !== confirmPassword) {
-    alert("Password dan Confirm Password tidak sama.");
-    return;
-  }
-
-  try {
-    setButtonLoading(submitButton, true, "Creating...");
-
-    const client = createSupabaseClient();
-    const { data, error } = await client.auth.signUp({
-      email: email,
-      password: password,
-      options: {
-        data: {
-          full_name: name
-        }
-      }
-    });
-
-    if (error) throw error;
-
-    registerForm.reset();
-
-    if (data.session) {
-      showDashboardPage();
+    if (confirmPasswordEl && password !== confirmPasswordEl.value) {
+      alert("Password dan Konfirmasi Password tidak sama!");
       return;
     }
-
-    alert("Akun berhasil dibuat. Jika Supabase meminta verifikasi email, cek inbox sebelum login.");
-    showLoginPage();
-  } catch (error) {
-    console.error("Gagal membuat akun Supabase:", error);
-    alert(error.message || "Akun gagal dibuat.");
-  } finally {
-    setButtonLoading(submitButton, false);
-  }
-});
-
-loginForm.addEventListener("submit", async function (event) {
-  event.preventDefault();
-
-  const email = document.getElementById("loginEmail").value.trim();
-  const password = document.getElementById("loginPassword").value;
-  const submitButton = loginForm.querySelector("button[type='submit']");
-
-  try {
-    setButtonLoading(submitButton, true, "Signing in...");
-
-    const client = createSupabaseClient();
-    const { error } = await client.auth.signInWithPassword({
-      email: email,
-      password: password
-    });
-
-    if (error) throw error;
-
-    loginForm.reset();
-    showDashboardPage();
-  } catch (error) {
-    console.error("Gagal login Supabase:", error);
-    alert("Email atau password salah, atau akun belum diverifikasi.");
-  } finally {
-    setButtonLoading(submitButton, false);
-  }
-});
-
-logoutButton.addEventListener("click", async function () {
-  try {
-    const client = createSupabaseClient();
-    await client.auth.signOut();
-  } catch (error) {
-    console.error("Gagal logout Supabase:", error);
-  }
-
-  showLoginPage();
-});
-
-/* ================= FETCH DATA ================= */
-function getLocalEduFunnelData() {
-  if (!window.eduFunnelData) return null;
-
-  return JSON.parse(JSON.stringify(window.eduFunnelData));
-}
-
-function validateEduFunnelData(data) {
-  return data && Array.isArray(data.sources);
-}
-
-function mapSupabaseData(summaryRow, sourcesRows, trafficRows, dailyRows) {
-  const safeSummaryRow = summaryRow && typeof summaryRow === "object"
-    ? summaryRow
-    : {};
-  let safeSourcesRows = Array.isArray(sourcesRows) ? sourcesRows : [];
-  const safeTrafficRows = Array.isArray(trafficRows) ? trafficRows : [];
-  const safeDailyRows = Array.isArray(dailyRows) ? dailyRows : [];
-
-  if (!summaryRow) {
-    console.warn("Supabase: summary_metrics kosong. Menggunakan nilai summary default 0.");
-  }
-
-  if (safeSourcesRows.length === 0) {
-    console.warn(
-      "Supabase: funnel_sources kosong. Menggunakan kerangka channel agar data harian tetap dapat dirender."
-    );
-
-    safeSourcesRows = Object.keys(CHANNEL_TRAFFIC_KEYS).map(function (channelName, index) {
-      return {
-        name: channelName,
-        pengunjung: 0,
-        daftar: 0,
-        test: 0,
-        daftar_ulang: 0,
-        berkuliah: 0,
-        conversion_rate: 0,
-        drop_off: 100,
-        progression_rates: {},
-        attrition_rates: {},
-        ranking: index + 1,
-        status: "No Data"
-      };
-    });
-  }
-
-  if (safeTrafficRows.length === 0) {
-    console.warn("Supabase: monthly_channel_traffic kosong.");
-  }
-
-  if (safeDailyRows.length === 0) {
-    console.warn("Supabase: daily_channel_traffic kosong.");
-  }
-
-  const requiredDailyFields = [
-    "date",
-    "channel",
-    "pengunjung",
-    "daftar",
-    "test",
-    "daftar_ulang",
-    "berkuliah"
-  ];
-
-  safeDailyRows.forEach(function (row, index) {
-    const missingFields = requiredDailyFields.filter(function (field) {
-      return !Object.prototype.hasOwnProperty.call(row, field);
-    });
-
-    if (missingFields.length > 0) {
-      console.warn(
-        `Supabase: daily_channel_traffic baris ${index + 1} tidak memiliki kolom: ${missingFields.join(", ")}. Nilai yang hilang memakai default.`
-      );
-    }
-  });
-
-  const summary = {
-    total_pengunjung: Number(safeSummaryRow.total_pengunjung || 0),
-    total_daftar: Number(safeSummaryRow.total_daftar || 0),
-    total_test: Number(safeSummaryRow.total_test || 0),
-    total_daftar_ulang: Number(safeSummaryRow.total_daftar_ulang || 0),
-    total_berkuliah: Number(safeSummaryRow.total_berkuliah || 0)
-  };
-
-  const conversionRate = Number(formatConversionRate(
-    calculateConversionRate(summary.total_pengunjung, summary.total_berkuliah)
-  ));
-
-  return {
-    metadata: {
-      project_name: safeSummaryRow.project_name || "EduFunnel",
-      period: safeSummaryRow.period || "2025",
-      generated_by: safeSummaryRow.generated_by || "Supabase"
-    },
-    summary: summary,
-    metric_cards: [
-      {
-        title: "Total Pengunjung",
-        value: summary.total_pengunjung
-      },
-      {
-        title: "Total Berkuliah",
-        value: summary.total_berkuliah
-      },
-      {
-        title: "Conversion Rate",
-        value: conversionRate
-      }
-    ],
-    funnel_stages: safeSummaryRow.funnel_stages || [
-      "Pengunjung",
-      "Daftar",
-      "Test",
-      "Daftar Ulang",
-      "Berkuliah"
-    ],
-    funnel_data: safeSummaryRow.funnel_data || [
-      summary.total_pengunjung,
-      summary.total_daftar,
-      summary.total_test,
-      summary.total_daftar_ulang,
-      summary.total_berkuliah
-    ],
-    sources: safeSourcesRows.map(function (source, index) {
-      const visitors = Number(source.pengunjung || 0);
-      const enrolled = Number(source.berkuliah || 0);
-      const sourceConversionRate = calculateConversionRate(visitors, enrolled);
-
-      return {
-        name: source.name || `Channel ${index + 1}`,
-        pengunjung: visitors,
-        daftar: Number(source.daftar || 0),
-        test: Number(source.test || 0),
-        daftar_ulang: Number(source.daftar_ulang || 0),
-        berkuliah: enrolled,
-        conversion_rate: Number(formatConversionRate(sourceConversionRate)),
-        drop_off: visitors > 0
-          ? Number(formatConversionRate(100 - sourceConversionRate))
-          : 0,
-        progression_rates: source.progression_rates || {},
-        attrition_rates: source.attrition_rates || {},
-        ranking: Number(source.ranking || index + 1),
-        status: source.status || "No Data"
-      };
-    }),
-    monthly_channel_traffic: safeTrafficRows.map(function (item) {
-      return {
-        ...item,
-        month_order: Number(item.month_order || 0),
-        month: item.month || "",
-        google_ads: Number(item.google_ads || 0),
-        instagram: Number(item.instagram || 0),
-        twitter_x: Number(item.twitter_x || 0),
-        website: Number(item.website || 0),
-        daftar: Number(item.daftar || 0),
-        test: Number(item.test || 0),
-        daftar_ulang: Number(item.daftar_ulang || 0),
-        berkuliah: Number(item.berkuliah || 0)
-      };
-    }),
-    daily_channel_traffic: safeDailyRows.map(function (item) {
-      return {
-        date: item.date || "",
-        channel: item.channel || "Unknown",
-        pengunjung: Number(item.pengunjung || 0),
-        daftar: Number(item.daftar || 0),
-        test: Number(item.test || 0),
-        daftar_ulang: Number(item.daftar_ulang || 0),
-        berkuliah: Number(item.berkuliah || 0)
-      };
-    })
-  };
-}
-
-async function fetchSupabaseData() {
-  const client = createSupabaseDataClient();
-
-  async function fetchSummaryMetrics() {
-    let result = await client
-      .from("summary_metrics")
-      .select("*")
-      .eq("period", "2025")
-      .maybeSingle();
-
-    if (result.error) {
-      console.warn(
-        "Supabase: summary_metrics dengan filter period gagal. Mencoba ulang tanpa filter.",
-        result.error
-      );
-
-      result = await client
-        .from("summary_metrics")
-        .select("*")
-        .limit(1)
-        .maybeSingle();
-    }
-
-    return result;
-  }
-
-  async function fetchFunnelSources() {
-    let result = await client
-      .from("funnel_sources")
-      .select("*")
-      .eq("period", "2025")
-      .order("id", { ascending: true });
-
-    if (result.error) {
-      console.warn(
-        "Supabase: funnel_sources dengan filter period gagal. Mencoba ulang tanpa filter.",
-        result.error
-      );
-
-      result = await client
-        .from("funnel_sources")
-        .select("*");
-    }
-
-    if (Array.isArray(result.data)) {
-      result.data.sort(function (sourceA, sourceB) {
-        return Number(sourceA.id || 0) - Number(sourceB.id || 0);
-      });
-    }
-
-    return result;
-  }
-
-  async function fetchMonthlyTraffic() {
-    let result = await client
-      .from("monthly_channel_traffic")
-      .select("*")
-      .eq("period", "2025")
-      .order("month_order", { ascending: true });
-
-    if (result.error) {
-      console.warn(
-        "Supabase: monthly_channel_traffic dengan filter period gagal. Mencoba ulang tanpa filter.",
-        result.error
-      );
-
-      result = await client
-        .from("monthly_channel_traffic")
-        .select("*");
-    }
-
-    if (Array.isArray(result.data)) {
-      result.data.sort(function (monthA, monthB) {
-        return Number(monthA.month_order || 0) - Number(monthB.month_order || 0);
-      });
-    }
-
-    return result;
-  }
-
-  async function fetchDailyTraffic() {
-    return client
-      .from("daily_channel_traffic")
-      .select("*");
-  }
-
-  const [summaryResult, sourcesResult, trafficResult, dailyResult] = await Promise.all([
-    fetchSummaryMetrics(),
-    fetchFunnelSources(),
-    fetchMonthlyTraffic(),
-    fetchDailyTraffic()
-  ]);
-
-  const queryResults = [
-    { name: "summary_metrics", result: summaryResult },
-    { name: "funnel_sources", result: sourcesResult },
-    { name: "monthly_channel_traffic", result: trafficResult },
-    { name: "daily_channel_traffic", result: dailyResult }
-  ];
-
-  queryResults.forEach(function (query) {
-    if (query.result.error) {
-      console.warn(
-        `Supabase: ${query.name} tidak dapat dibaca. Dashboard tetap memakai tabel Supabase lain yang tersedia.`,
-        query.result.error
-      );
-    }
-  });
-
-  const successfulQueries = queryResults.filter(function (query) {
-    return !query.result.error;
-  });
-
-  if (successfulQueries.length === 0) {
-    throw new Error("Semua query tabel Supabase gagal.");
-  }
-
-  const dailyRows = dailyResult.error || !Array.isArray(dailyResult.data)
-    ? []
-    : dailyResult.data;
-
-  console.log("RAW daily_channel_traffic:", dailyRows);
-
-  const mappedData = mapSupabaseData(
-    summaryResult.error ? null : summaryResult.data,
-    sourcesResult.error ? [] : sourcesResult.data,
-    trafficResult.error ? [] : trafficResult.data,
-    dailyRows
-  );
-
-  if (!dailyResult.error) {
-    activeDataSource = "SUPABASE";
-  }
-
-  console.log("DATA SUPABASE", mappedData);
-
-  return mappedData;
-}
-
-async function fetchJsonFallbackData() {
-  if (window.location.protocol !== "file:") {
-    const response = await fetch("data_funnel.json");
-
-    if (response.ok) {
-      return response.json();
-    }
-  }
-
-  const localData = getLocalEduFunnelData();
-
-  if (validateEduFunnelData(localData)) {
-    return localData;
-  }
-
-  throw new Error("Fallback data_funnel tidak tersedia.");
-}
-
-async function fetchEduFunnelData() {
-  try {
-    app.innerHTML = `
-      <section class="loading-state">
-        <h2>Loading data...</h2>
-        <p>Sedang mengambil data dashboard dari Supabase.</p>
-      </section>
-    `;
-
-    appData = await fetchSupabaseData();
-    activeDataSource = "SUPABASE";
-    console.info("EduFunnel data source: SUPABASE");
-
-    setupNavigation();
-    setupFilters();
-
-    renderPage("overview");
-  } catch (error) {
-    activeDataSource = "supabase-error";
-    console.error(
-      "SUPABASE FETCH FAILED: dashboard tidak menerima data terbaru dari Supabase.",
-      error
-    );
-    console.warn(
-      "EduFunnel akan mencoba data_funnel.json sebagai fallback. Data fallback mungkin tidak sama dengan database."
-    );
 
     try {
-      app.innerHTML = `
-        <section class="loading-state">
-          <h2>Loading data...</h2>
-          <p>Supabase belum tersedia. Menggunakan fallback data_funnel.json.</p>
-        </section>
-      `;
-
-      const fallbackData = await fetchJsonFallbackData();
-
-      if (!validateEduFunnelData(fallbackData)) {
-        throw new Error("Format fallback data_funnel tidak valid.");
-      }
-
-      appData = fallbackData;
-      activeDataSource = "json-fallback";
-      console.warn("EduFunnel data source: JSON FALLBACK", fallbackData);
-      setupNavigation();
-      setupFilters();
-      renderPage("overview");
-      return;
-    } catch (fallbackError) {
-      console.error("Gagal mengambil fallback data:", fallbackError);
+      setButtonLoading(submitBtn, true, "Mendaftarkan...");
+      const client = createSupabaseClient();
+      const { data, error } = await client.auth.signUp({
+        email: email,
+        password: password,
+        options: {
+          data: { full_name: name }
+        }
+      });
+      if (error) throw error;
+      registerForm.reset();
+      alert("Pendaftaran berhasil! Silakan masuk dengan akun Anda.");
+      showLoginPage();
+    } catch (err) {
+      alert("Gagal mendaftar: " + err.message);
+    } finally {
+      setButtonLoading(submitBtn, false);
     }
-
-    app.innerHTML = `
-      <section class="empty-state">
-        <h2>Data gagal dimuat</h2>
-        <p>Query Supabase gagal dan fallback data_funnel tidak tersedia.</p>
-      </section>
-    `;
-  }
+  });
 }
 
-/* ================= NAVIGATION ================= */
-function setupNavigation() {
-  const menuItems = document.querySelectorAll(".menu-item");
+// 2. Form Login (Mendeteksi Admin edufunnelpolimedia@gmail.com vs Pengguna Biasa)
+if (loginForm) {
+  loginForm.addEventListener("submit", async function (e) {
+    e.preventDefault();
+    const email = document.getElementById("loginEmail").value.trim();
+    const password = document.getElementById("loginPassword").value;
+    const submitBtn = loginForm.querySelector("button[type='submit']");
 
-  menuItems.forEach(function (item) {
+    try {
+      setButtonLoading(submitBtn, true, "Memeriksa...");
+      const client = createSupabaseClient();
+      const { data, error } = await client.auth.signInWithPassword({
+        email: email,
+        password: password
+      });
+      if (error) throw error;
+
+      // Cek apakah akun ini adalah Admin dari tabel profiles atau email admin langsung
+      let isAdmin = email.toLowerCase() === "edufunnelpolimedia@gmail.com";
+      try {
+        const { data: profile } = await client
+          .from("profiles")
+          .select("role")
+          .eq("id", data.user.id)
+          .maybeSingle();
+        if (profile && profile.role === "admin") {
+          isAdmin = true;
+        }
+      } catch (profileErr) {
+        console.warn("Cek tabel profiles dilewati:", profileErr);
+      }
+
+      if (isAdmin) {
+        alert("Selamat datang, Admin Polimedia (" + email + ")!");
+      } else {
+        alert("Selamat datang di EduFunnel Polimedia!");
+      }
+
+      loginForm.reset();
+      showDashboardPage();
+    } catch (err) {
+      alert("Login gagal: " + err.message);
+    } finally {
+      setButtonLoading(submitBtn, false);
+    }
+  });
+}
+
+// 3. Tombol Logout (Sudah Diperbaiki & Menghapus Sesi Aktif)
+if (logoutButton) {
+  logoutButton.addEventListener("click", async function (e) {
+    e.preventDefault();
+    try {
+      const client = createSupabaseClient();
+      await client.auth.signOut();
+    } catch (err) {
+      console.warn("Gagal sign out dari Supabase:", err);
+    }
+    localStorage.clear();
+    sessionStorage.clear();
+    showLoginPage();
+  });
+}
+
+/* ================= RUMUS PERHITUNGAN PERSENTASE AKURAT ================= */
+function hitungPersenLolos(pendaftar, diterima) {
+  const p = Number(pendaftar || 0);
+  const d = Number(diterima || 0);
+  if (p <= 0) return 0;
+  return Number(((d / p) * 100).toFixed(2));
+}
+
+function hitungPersenTidakLolos(pendaftar, diterima) {
+  const p = Number(pendaftar || 0);
+  if (p <= 0) return 0;
+  const lolos = hitungPersenLolos(pendaftar, diterima);
+  return Number((100 - lolos).toFixed(2));
+}
+
+function formatPersen(angka) {
+  return `${Number(angka || 0).toFixed(2)}%`;
+}
+
+/* ================= AMBIL DATA BERDASARKAN FILTER TAHUN & JALUR ================= */
+function getMetricsByRangeAndChannel(yearKey = currentDateRange, channel = currentChannel) {
+  const datasets = (appData && appData.yearly_datasets) ? appData.yearly_datasets : {};
+  const selectedYearObj = datasets[yearKey] || datasets["2025"];
+  const rawSources = Array.isArray(selectedYearObj.sources) ? selectedYearObj.sources : [];
+
+  const filteredSources = rawSources
+    .filter(function (item) {
+      return channel === "all" || item.name.toLowerCase() === channel.toLowerCase();
+    })
+    .map(function (item) {
+      const pendaftar = Number(item.pengunjung || 0);
+      const diterima = Number(item.berkuliah || 0);
+      const tidakLolosCount = Math.max(0, pendaftar - diterima);
+      const persenLolos = hitungPersenLolos(pendaftar, diterima);
+      const persenTidakLolos = hitungPersenTidakLolos(pendaftar, diterima);
+
+      return {
+        ...item,
+        pengunjung: pendaftar,
+        daftar: Number(item.daftar || 0),
+        test: Number(item.test || 0),
+        daftar_ulang: Number(item.daftar_ulang || 0),
+        berkuliah: diterima,
+        ditolak: tidakLolosCount,
+        conversion_rate: persenLolos,
+        drop_off: persenTidakLolos
+      };
+    });
+
+  const summary = filteredSources.reduce(
+    function (acc, row) {
+      acc.total_pengunjung += row.pengunjung;
+      acc.total_daftar += row.daftar;
+      acc.total_test += row.test;
+      acc.total_daftar_ulang += row.daftar_ulang;
+      acc.total_berkuliah += row.berkuliah;
+      acc.total_ditolak += row.ditolak;
+      return acc;
+    },
+    {
+      total_pengunjung: 0,
+      total_daftar: 0,
+      total_test: 0,
+      total_daftar_ulang: 0,
+      total_berkuliah: 0,
+      total_ditolak: 0
+    }
+  );
+
+  const totalPersenLolos = hitungPersenLolos(summary.total_pengunjung, summary.total_berkuliah);
+  const totalPersenTidakLolos = hitungPersenTidakLolos(summary.total_pengunjung, summary.total_berkuliah);
+
+  return {
+    yearKey,
+    yearLabel: selectedYearObj.label,
+    catatan: selectedYearObj.catatan,
+    is_na: selectedYearObj.is_na,
+    channel,
+    sources: filteredSources,
+    summary,
+    conversion_rate: totalPersenLolos,
+    fail_rate: totalPersenTidakLolos
+  };
+}
+
+function getSummaryStages(summary) {
+  const totalPendaftar = Number(summary.total_pengunjung || 0);
+  return [
+    { label: "1. Total Pendaftar Masuk", count: totalPendaftar },
+    { label: "2. Lolos Seleksi Berkas", count: Number(summary.total_daftar || 0) },
+    { label: "3. Mengikuti Tes / Penilaian", count: Number(summary.total_test || 0) },
+    { label: "4. Masuk Kuota Daya Tampung", count: Number(summary.total_daftar_ulang || 0) },
+    { label: "5. Resmi Diterima (Lulus)", count: Number(summary.total_berkuliah || 0) }
+  ];
+}
+
+/* ================= FETCH & SETUP AWAL ================= */
+async function fetchEduFunnelData() {
+  appData = JSON.parse(JSON.stringify(window.eduFunnelData));
+  setupNavigation();
+  setupFilters();
+  setupCalculatorForm();
+  renderPage(currentPage);
+}
+
+function setupNavigation() {
+  document.querySelectorAll(".menu-item").forEach(function (item) {
     item.onclick = function () {
-      setActiveMenu(item.dataset.page);
+      document.querySelectorAll(".menu-item").forEach(el => el.classList.remove("active"));
+      item.classList.add("active");
       renderPage(item.dataset.page);
     };
   });
 }
 
-function setActiveMenu(page) {
-  const menuItems = document.querySelectorAll(".menu-item");
-
-  menuItems.forEach(function (item) {
-    item.classList.remove("active");
-
-    if (item.dataset.page === page) {
-      item.classList.add("active");
-    }
-  });
-}
-
-/* ================= FILTER ================= */
 function setupFilters() {
   if (channelFilter) {
     channelFilter.onchange = function () {
@@ -641,7 +293,6 @@ function setupFilters() {
       renderPage(currentPage);
     };
   }
-
   if (dateFilter) {
     dateFilter.onchange = function () {
       currentDateRange = dateFilter.value;
@@ -650,782 +301,544 @@ function setupFilters() {
   }
 }
 
-/* ================= DATE RANGE DATA ================= */
-function getMonthlyChannelTraffic() {
-  return appData.monthly_channel_traffic || [
-    { month: "Jan", google_ads: 19, instagram: 18, twitter_x: 23, website: 18 },
-    { month: "Feb", google_ads: 25, instagram: 22, twitter_x: 23, website: 20 },
-    { month: "Mar", google_ads: 14, instagram: 16, twitter_x: 14, website: 16 },
-    { month: "Apr", google_ads: 18, instagram: 23, twitter_x: 21, website: 29 },
-    { month: "May", google_ads: 29, instagram: 23, twitter_x: 24, website: 20 },
-    { month: "Jun", google_ads: 29, instagram: 13, twitter_x: 15, website: 27 },
-    { month: "Jul", google_ads: 12, instagram: 25, twitter_x: 17, website: 21 },
-    { month: "Aug", google_ads: 24, instagram: 26, twitter_x: 23, website: 31 },
-    { month: "Sep", google_ads: 19, instagram: 27, twitter_x: 15, website: 21 },
-    { month: "Oct", google_ads: 24, instagram: 26, twitter_x: 15, website: 14 },
-    { month: "Nov", google_ads: 15, instagram: 21, twitter_x: 21, website: 15 },
-    { month: "Dec", google_ads: 28, instagram: 26, twitter_x: 16, website: 19 }
-  ];
+/* ================= RENDER HALAMAN UTAMA ================= */
+function renderPage(page) {
+  currentPage = page;
+  if (monthlyChart) {
+    monthlyChart.destroy();
+    monthlyChart = null;
+  }
+  if (page === "overview") renderOverview();
+  if (page === "channel") renderChannelAnalysis();
+  if (page === "funnel") renderFunnelDepth();
+  if (page === "table") renderDataTable();
+  setupReportExport();
 }
 
-function getLatestMonthlyTraffic() {
-  const monthlyData = getMonthlyChannelTraffic();
+/* 1. HALAMAN RINGKASAN PELUANG (OVERVIEW) */
+function renderOverview() {
+  const metrics = getMetricsByRangeAndChannel(currentDateRange, currentChannel);
+  const s = metrics.summary;
+  const stages = getSummaryStages(s);
+  const bestSource = [...metrics.sources].sort((a, b) => b.conversion_rate - a.conversion_rate)[0];
 
-  if (monthlyData.length === 0) {
-    return null;
-  }
+  app.innerHTML = `
+    <section class="page-title">
+      <p>LAPORAN ANALITIK PELUANG MASUK POLIMEDIA</p>
+      <h1>${metrics.yearLabel}</h1>
+      <span>${metrics.catatan}</span>
+    </section>
 
-  const hasMonthOrder = monthlyData.some(function (item) {
-    return Number(item.month_order || 0) > 0;
-  });
+    ${metrics.is_na ? `
+      <div class="info-banner">
+        ⚠️ <strong>Catatan Data 2022:</strong> Pada dokumen resmi Polimedia, rincian angka pendaftar tahun 2022 tertulis <b>N/A</b> (belum terpublikasi). Data di bawah menggunakan angka estimasi baseline. Pilih tahun <b>2023, 2024, atau 2025</b> untuk melihat angka resmi PMB.
+      </div>
+    ` : ""}
 
-  if (!hasMonthOrder) {
-    return monthlyData[monthlyData.length - 1];
-  }
+    <section class="summary summary-4">
+      <div class="summary-card">
+        <h3>Total Pendaftar</h3>
+        <p>${s.total_pengunjung.toLocaleString("id-ID")} <small style="font-size:0.9rem;color:#94a3b8;">Orang</small></p>
+      </div>
+      <div class="summary-card" style="border-bottom: 3px solid #22c55e;">
+        <h3>Diterima (Lolos)</h3>
+        <p style="color:#4ade80;">${s.total_berkuliah.toLocaleString("id-ID")} <small style="font-size:0.9rem;">(${formatPersen(metrics.conversion_rate)})</small></p>
+      </div>
+      <div class="summary-card" style="border-bottom: 3px solid #ef4444;">
+        <h3>Tidak Lolos (Gugur)</h3>
+        <p style="color:#f87171;">${s.total_ditolak.toLocaleString("id-ID")} <small style="font-size:0.9rem;">(${formatPersen(metrics.fail_rate)})</small></p>
+      </div>
+      <div class="summary-card">
+        <h3>Rasio Keketatan</h3>
+        <p>1 : ${s.total_berkuliah > 0 ? Math.round(s.total_pengunjung / s.total_berkuliah) : 0} <small style="font-size:0.85rem;color:#94a3b8;">Pesaing</small></p>
+      </div>
+    </section>
 
-  return monthlyData.reduce(function (latest, item) {
-    return Number(item.month_order || 0) > Number(latest.month_order || 0)
-      ? item
-      : latest;
-  }, monthlyData[0]);
+    <section class="card" style="margin-bottom: 24px;">
+      <h2>Perbandingan Visual Peluang Lolos vs Tidak Lolos (${metrics.yearLabel})</h2>
+      <p style="color:#94a3b8; font-size:0.9rem;">Dari total <b>${s.total_pengunjung.toLocaleString("id-ID")} pendaftar</b>, berikut adalah proporsi peserta yang berhasil diterima dibandingkan yang gugur:</p>
+      <div class="prob-bar-wrap">
+        <div class="prob-bar-pass" style="width: ${Math.max(metrics.conversion_rate, 8)}%;">
+          LOLOS: ${formatPersen(metrics.conversion_rate)} (${s.total_berkuliah.toLocaleString("id-ID")})
+        </div>
+        <div class="prob-bar-fail">
+          TIDAK LOLOS: ${formatPersen(metrics.fail_rate)} (${s.total_ditolak.toLocaleString("id-ID")})
+        </div>
+      </div>
+    </section>
+
+    <section class="dashboard-grid">
+      <div class="card">
+        <div class="section-header">
+          <div>
+            <h2>Alur Penyaringan Peserta (Funnel Seleksi)</h2>
+            <span>Persentase peserta yang bertahan di setiap tahapan seleksi terhadap total pendaftar awal</span>
+          </div>
+        </div>
+        <div id="overviewFunnel"></div>
+      </div>
+
+      <aside class="card insight-card">
+        <h2>Kesimpulan Cepat</h2>
+        <div style="margin: 12px 0;">
+          <div style="margin-bottom: 10px;">
+            <span class="pill-pass">✓ Peluang Lolos: ${formatPersen(metrics.conversion_rate)}</span>
+          </div>
+          <div>
+            <span class="pill-fail">✕ Risiko Gagal: ${formatPersen(metrics.fail_rate)}</span>
+          </div>
+        </div>
+        <p>
+          Artinya, dari setiap <strong>100 pendaftar</strong> di Polimedia pada periode ini, rata-rata sekitar
+          <strong>${Math.round(metrics.conversion_rate)} orang diterima</strong> dan
+          <strong>${100 - Math.round(metrics.conversion_rate)} orang tidak lolos</strong>.
+        </p>
+        <hr />
+        <p>
+          Jalur yang paling direkomendasikan:
+          <strong>Jalur ${bestSource ? bestSource.name : "-"}</strong>
+          karena memiliki peluang lolos tertinggi yaitu <strong>${bestSource ? formatPersen(bestSource.conversion_rate) : "0%"}</strong>.
+        </p>
+        ${getReportExportMarkup()}
+      </aside>
+    </section>
+  `;
+  renderFunnelBars("overviewFunnel", stages);
 }
 
-function getDailyChannelTraffic() {
-  return Array.isArray(appData.daily_channel_traffic)
-    ? appData.daily_channel_traffic
-    : [];
+/* 2. HALAMAN PERBANDINGAN JALUR MASUK (CHANNEL ANALYSIS) */
+function renderChannelAnalysis() {
+  const metrics = getMetricsByRangeAndChannel(currentDateRange, currentChannel);
+
+  const channelCards = metrics.sources.map(function (source) {
+    return `
+      <div class="channel-card">
+        <div class="channel-top">
+          <h2>Jalur ${source.name}</h2>
+          <span class="badge stable">${source.status}</span>
+        </div>
+        <p class="label">Total Pendaftar</p>
+        <h3>${source.pengunjung.toLocaleString("id-ID")} Orang</h3>
+
+        <div class="prob-bar-wrap" style="height:20px; font-size:0.7rem;">
+          <div class="prob-bar-pass" style="width:${Math.max(source.conversion_rate, 12)}%">${formatPersen(source.conversion_rate)}</div>
+          <div class="prob-bar-fail">${formatPersen(source.drop_off)}</div>
+        </div>
+
+        <div class="channel-stats" style="grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+          <div style="background:rgba(34,197,94,0.1); padding:8px; border-radius:8px;">
+            <span style="color:#4ade80;">✓ Diterima (Lolos)</span>
+            <strong style="color:#4ade80; display:block; font-size:1.05rem;">
+              ${source.berkuliah.toLocaleString("id-ID")} (${formatPersen(source.conversion_rate)})
+            </strong>
+          </div>
+          <div style="background:rgba(239,68,68,0.1); padding:8px; border-radius:8px;">
+            <span style="color:#f87171;">✕ Tidak Lolos</span>
+            <strong style="color:#f87171; display:block; font-size:1.05rem;">
+              ${source.ditolak.toLocaleString("id-ID")} (${formatPersen(source.drop_off)})
+            </strong>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  app.innerHTML = `
+    <section class="page-title">
+      <p>PERBANDINGAN JALUR MASUK POLIMEDIA</p>
+      <h1>Peluang Lolos vs Tidak Lolos per Jalur (${metrics.yearLabel})</h1>
+      <span>Bandingkan langsung persentase kelulusan antara jalur SNBP, SNBT, dan Mandiri.</span>
+    </section>
+
+    <section class="channel-grid">
+      ${channelCards}
+    </section>
+
+    <section class="card">
+      <h2>Grafik Tren Pendaftar & Mahasiswa Diterima (2022 – Prediksi 2026)</h2>
+      <p class="label">Perbandingan lonjakan pendaftar tiap jalur dari tahun 2022, 2023, 2024, 2025, hingga Prediksi 2026.</p>
+      <canvas id="monthlyChart" style="max-height: 380px;"></canvas>
+    </section>
+  `;
+  renderMultiYearChart();
 }
 
-function parseDailyTrafficDate(value) {
-  if (!value) return null;
+/* 3. HALAMAN TAHAPAN SELEKSI (FUNNEL DEPTH) */
+function renderFunnelDepth() {
+  const metrics = getMetricsByRangeAndChannel(currentDateRange, currentChannel);
+  const stages = getSummaryStages(metrics.summary);
 
-  const parsedDate = new Date(`${value}T00:00:00`);
+  app.innerHTML = `
+    <section class="page-title">
+      <p>DETAIL PENYARINGAN PESERTA</p>
+      <h1>Tahapan Seleksi & Gugur (${metrics.yearLabel})</h1>
+      <span>Melihat berapa banyak peserta yang bertahan (Lolos) dan tereliminasi (Tidak Lolos) di tiap tahapan.</span>
+    </section>
 
-  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate;
+    <section class="dashboard-grid">
+      <div class="card">
+        <h2>Detail Konversi Tahap demi Tahap</h2>
+        <div id="depthFunnel"></div>
+      </div>
+      <aside>
+        <div class="card friction-card">
+          <h2>Ringkasan Akhir Seleksi</h2>
+          <p style="margin-bottom: 12px;">
+            Dari <strong>${metrics.summary.total_pengunjung.toLocaleString("id-ID")} pendaftar</strong>:
+          </p>
+          <p class="pill-pass" style="margin-bottom: 8px; display:block;">
+            ✓ Lolos Diterima: ${metrics.summary.total_berkuliah.toLocaleString("id-ID")} orang (${formatPersen(metrics.conversion_rate)})
+          </p>
+          <p class="pill-fail" style="display:block;">
+            ✕ Gugur / Tidak Lolos: ${metrics.summary.total_ditolak.toLocaleString("id-ID")} orang (${formatPersen(metrics.fail_rate)})
+          </p>
+        </div>
+        <div class="card">
+          <h3>Unduh Data Analitik</h3>
+          <p>Simpan hasil perhitungan peluang periode ini ke PDF, Excel/CSV, atau JSON.</p>
+          ${getReportExportMarkup()}
+        </div>
+      </aside>
+    </section>
+  `;
+  renderFunnelBars("depthFunnel", stages);
 }
 
-function getAggregatedDailyData(range = currentDateRange, channel = currentChannel) {
-  const dailyRows = getDailyChannelTraffic();
-  const cacheKey = `${range}:${channel}`;
+/* 4. HALAMAN TABEL DATA LENGKAP (MULTI-TAHUN, JALUR & 16 PRODI) */
+function renderDataTable() {
+  const metrics = getMetricsByRangeAndChannel(currentDateRange, currentChannel);
+  const s = metrics.summary;
 
-  if (
-    dailyAggregationCache
-    && dailyAggregationCache.key === cacheKey
-    && dailyAggregationCache.rowsReference === dailyRows
-  ) {
-    return dailyAggregationCache.result;
-  }
+  const rowsJalur = metrics.sources.map(function (src) {
+    return `
+      <tr>
+        <td><strong>Jalur ${src.name}</strong></td>
+        <td>${src.pengunjung.toLocaleString("id-ID")}</td>
+        <td style="color:#4ade80; font-weight:600;">${src.berkuliah.toLocaleString("id-ID")}</td>
+        <td style="color:#f87171; font-weight:600;">${src.ditolak.toLocaleString("id-ID")}</td>
+        <td><span class="pill-pass">${formatPersen(src.conversion_rate)}</span></td>
+        <td><span class="pill-fail">${formatPersen(src.drop_off)}</span></td>
+        <td>1 : ${src.berkuliah > 0 ? Math.round(src.pengunjung / src.berkuliah) : 0}</td>
+      </tr>
+    `;
+  }).join("");
 
-  if (dailyRows.length === 0) {
-    console.warn(
-      "Supabase: daily_channel_traffic kosong total. Menggunakan funnel_sources sebagai fallback."
-    );
+  const yearOrder = ["2022", "2023", "2024", "2025", "all_years", "prediksi_2026"];
+  const rowsTahun = yearOrder.map(function (yKey) {
+    const m = getMetricsByRangeAndChannel(yKey, currentChannel);
+    const activeStyle = yKey === currentDateRange ? "background: rgba(56, 189, 248, 0.12);" : "";
+    return `
+      <tr style="${activeStyle}">
+        <td><strong>${m.yearLabel}</strong></td>
+        <td>${m.summary.total_pengunjung.toLocaleString("id-ID")}</td>
+        <td style="color:#4ade80; font-weight:600;">${m.summary.total_berkuliah.toLocaleString("id-ID")}</td>
+        <td style="color:#f87171;">${m.summary.total_ditolak.toLocaleString("id-ID")}</td>
+        <td><span class="pill-pass">${formatPersen(m.conversion_rate)}</span></td>
+        <td><span class="pill-fail">${formatPersen(m.fail_rate)}</span></td>
+      </tr>
+    `;
+  }).join("");
 
-    const fallbackSources = (Array.isArray(appData.sources) ? appData.sources : [])
-      .filter(function (source) {
-        return channel === "all" || source.name === channel;
-      })
-      .map(function (source) {
-        const visitors = Number(source.pengunjung || 0);
-        const enrolled = Number(source.berkuliah || 0);
-        const conversionRate = calculateConversionRate(visitors, enrolled);
+  const scaleFactor = s.total_pengunjung / 11058;
+  const rowsProdi = (appData.prodi_list || []).map(function (p) {
+    const peminat = Math.max(10, Math.round(p.peminat_2025 * scaleFactor));
+    const kuota = currentDateRange === "all_years" ? p.kuota * 3 : p.kuota;
+    const diterima = Math.min(peminat, kuota);
+    const ditolak = Math.max(0, peminat - diterima);
+    const persenLolos = hitungPersenLolos(peminat, diterima);
+    const persenGagal = hitungPersenTidakLolos(peminat, diterima);
 
-        return {
-          ...source,
-          pengunjung: visitors,
-          daftar: Number(source.daftar || 0),
-          test: Number(source.test || 0),
-          daftar_ulang: Number(source.daftar_ulang || 0),
-          berkuliah: enrolled,
-          conversion_rate: Number(formatConversionRate(conversionRate)),
-          drop_off: visitors > 0 ? Number(formatConversionRate(100 - conversionRate)) : 0
-        };
-      });
-    const fallbackSummary = fallbackSources.reduce(function (totals, source) {
-      totals.total_pengunjung += Number(source.pengunjung || 0);
-      totals.total_daftar += Number(source.daftar || 0);
-      totals.total_test += Number(source.test || 0);
-      totals.total_daftar_ulang += Number(source.daftar_ulang || 0);
-      totals.total_berkuliah += Number(source.berkuliah || 0);
+    return `
+      <tr>
+        <td>${p.kategori}</td>
+        <td><strong>${p.prodi}</strong></td>
+        <td>${peminat.toLocaleString("id-ID")}</td>
+        <td style="color:#4ade80;">${diterima.toLocaleString("id-ID")}</td>
+        <td style="color:#f87171;">${ditolak.toLocaleString("id-ID")}</td>
+        <td><span class="pill-pass">${formatPersen(persenLolos)}</span></td>
+        <td><span class="pill-fail">${formatPersen(persenGagal)}</span></td>
+        <td>Min. Rapor ${p.min_rapor} / UTBK ${p.min_utbk}</td>
+      </tr>
+    `;
+  }).join("");
 
-      return totals;
-    }, {
-      total_pengunjung: 0,
-      total_daftar: 0,
-      total_test: 0,
-      total_daftar_ulang: 0,
-      total_berkuliah: 0
-    });
-    const fallbackResult = {
-      range: range,
-      channel: channel,
-      latestDate: null,
-      rows: [],
-      sources: fallbackSources,
-      summary: fallbackSummary,
-      conversion_rate: calculateConversionRate(
-        fallbackSummary.total_pengunjung,
-        fallbackSummary.total_berkuliah
-      ),
-      source: "funnel_sources_fallback"
-    };
+  app.innerHTML = `
+    <section class="page-title">
+      <p>TABEL REKAPITULASI LENGKAP & AKURAT</p>
+      <h1>Data Pendaftar, Persentase Lolos & Tidak Lolos (${metrics.yearLabel})</h1>
+      <span>Tabel perbandingan terperinci per jalur, lintas tahun (2022–2026), dan 16 Program Studi Polimedia.</span>
+    </section>
 
-    dailyAggregationCache = {
-      key: cacheKey,
-      rowsReference: dailyRows,
-      result: fallbackResult
-    };
+    <section class="card" style="margin-bottom: 24px;">
+      <h2 style="margin-bottom: 12px;">Tabel 1. Rincian Peluang Lolos vs Tidak Lolos per Jalur (${metrics.yearLabel})</h2>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Jalur Seleksi</th>
+            <th>Total Pendaftar</th>
+            <th>Diterima (Lolos)</th>
+            <th>Ditolak (Tidak Lolos)</th>
+            <th>% Peluang Lolos</th>
+            <th>% Risiko Tidak Lolos</th>
+            <th>Rasio Persaingan</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsJalur}
+          <tr class="total-row">
+            <td>TOTAL KESELURUHAN</td>
+            <td>${s.total_pengunjung.toLocaleString("id-ID")}</td>
+            <td>${s.total_berkuliah.toLocaleString("id-ID")}</td>
+            <td>${s.total_ditolak.toLocaleString("id-ID")}</td>
+            <td>${formatPersen(metrics.conversion_rate)}</td>
+            <td>${formatPersen(metrics.fail_rate)}</td>
+            <td>1 : ${s.total_berkuliah > 0 ? Math.round(s.total_pengunjung / s.total_berkuliah) : 0}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
 
-    console.log("FINAL AGGREGATED DATA:", fallbackResult);
+    <section class="card" style="margin-bottom: 24px;">
+      <h2 style="margin-bottom: 12px;">Tabel 2. Perbandingan Lintas Tahun (2022, 2023, 2024, 2025, Keseluruhan & Prediksi 2026)</h2>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Periode Tahun</th>
+            <th>Total Pendaftar</th>
+            <th>Total Diterima</th>
+            <th>Total Tidak Lolos</th>
+            <th>% Peluang Lolos</th>
+            <th>% Tidak Lolos</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsTahun}
+        </tbody>
+      </table>
+    </section>
 
-    return fallbackResult;
-  }
+    <section class="card">
+      <h2 style="margin-bottom: 12px;">Tabel 3. Estimasi Peluang Lolos & Tidak Lolos 16 Program Studi Polimedia</h2>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Jurusan</th>
+            <th>Program Studi</th>
+            <th>Est. Peminat</th>
+            <th>Kuota Diterima</th>
+            <th>Tidak Lolos</th>
+            <th>% Lolos</th>
+            <th>% Tidak Lolos</th>
+            <th>Rekomendasi Nilai Aman</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsProdi}
+        </tbody>
+      </table>
+    </section>
+  `;
+}
 
-  const datedRows = dailyRows
-    .map(function (item) {
-      return {
-        item: item,
-        parsedDate: parseDailyTrafficDate(item.date)
-      };
-    })
-    .filter(function (entry) {
-      return entry.parsedDate;
-    });
+/* ================= FUNNEL BAR & GRAFIK MULTI-TAHUN ================= */
+function renderFunnelBars(containerId, stages) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const totalAwal = stages[0].count;
 
-  const latestDate = datedRows.length > 0
-    ? datedRows.reduce(function (latest, entry) {
-      return entry.parsedDate > latest ? entry.parsedDate : latest;
-    }, datedRows[0].parsedDate)
-    : null;
-  let rangeRows = dailyRows;
+  container.innerHTML = stages.map(function (stage, index) {
+    const persenTerhadapAwal = totalAwal === 0 ? 0 : Number(((stage.count / totalAwal) * 100).toFixed(2));
+    const gugurDariAwal = Math.max(0, totalAwal - stage.count);
+    const persenGugur = totalAwal === 0 ? 0 : Number((100 - persenTerhadapAwal).toFixed(2));
 
-  if (latestDate && range === "7") {
-    const latestDates = [...new Set(
-      datedRows.map(function (entry) {
-        return entry.item.date;
-      })
-    )]
-      .sort(function (dateA, dateB) {
-        return parseDailyTrafficDate(dateB) - parseDailyTrafficDate(dateA);
-      })
-      .slice(0, 7);
-    const latestDateSet = new Set(latestDates);
-
-    rangeRows = datedRows
-      .filter(function (entry) {
-        return latestDateSet.has(entry.item.date);
-      })
-      .map(function (entry) {
-        return entry.item;
-      });
-  }
-
-  if (latestDate && range === "month") {
-    rangeRows = datedRows
-      .filter(function (entry) {
-        return entry.parsedDate.getFullYear() === latestDate.getFullYear()
-          && entry.parsedDate.getMonth() === latestDate.getMonth();
-      })
-      .map(function (entry) {
-        return entry.item;
-      });
-  }
-
-  if (latestDate && range === "year") {
-    rangeRows = datedRows
-      .filter(function (entry) {
-        return entry.parsedDate.getFullYear() === latestDate.getFullYear();
-      })
-      .map(function (entry) {
-        return entry.item;
-      });
-  }
-
-  const filteredRows = channel === "all"
-    ? rangeRows
-    : rangeRows.filter(function (item) {
-      return item.channel === channel;
-    });
-  const grouped = filteredRows.reduce(function (totals, item) {
-    const channelName = item.channel;
-
-    if (!totals[channelName]) {
-      totals[channelName] = {
-        pengunjung: 0,
-        daftar: 0,
-        test: 0,
-        daftar_ulang: 0,
-        berkuliah: 0
-      };
+    let keteranganTahap = `<div class="drop" style="color:#4ade80;">Basis Pendaftar Awal: 100% (${stage.count.toLocaleString("id-ID")} peserta)</div>`;
+    if (index > 0) {
+      keteranganTahap = `
+        <div class="drop" style="display:flex; justify-content:space-between; font-size:0.82rem; margin-top:4px;">
+          <span style="color:#4ade80;">✓ Bertahan: <b>${persenTerhadapAwal}%</b> (${stage.count.toLocaleString("id-ID")} org)</span>
+          <span style="color:#f87171;">✕ Tereliminasi Kumulatif: <b>${persenGugur}%</b> (${gugurDariAwal.toLocaleString("id-ID")} org)</span>
+        </div>
+      `;
     }
 
-    totals[channelName].pengunjung += Number(item.pengunjung || 0);
-    totals[channelName].daftar += Number(item.daftar || 0);
-    totals[channelName].test += Number(item.test || 0);
-    totals[channelName].daftar_ulang += Number(item.daftar_ulang || 0);
-    totals[channelName].berkuliah += Number(item.berkuliah || 0);
-
-    return totals;
-  }, {});
-  const selectedChannels = channel === "all"
-    ? Object.keys(CHANNEL_TRAFFIC_KEYS)
-    : [channel];
-  const sources = selectedChannels.map(function (channelName, index) {
-    const counts = grouped[channelName] || {
-      pengunjung: 0,
-      daftar: 0,
-      test: 0,
-      daftar_ulang: 0,
-      berkuliah: 0
-    };
-    const visitors = Number(counts.pengunjung);
-    const enrolled = Number(counts.berkuliah);
-    const conversionRate = calculateConversionRate(visitors, enrolled);
-
-    return {
-      name: channelName,
-      pengunjung: visitors,
-      daftar: Number(counts.daftar),
-      test: Number(counts.test),
-      daftar_ulang: Number(counts.daftar_ulang),
-      berkuliah: enrolled,
-      conversion_rate: conversionRate.toFixed(2),
-      drop_off: Number((100 - conversionRate).toFixed(2)),
-      progression_rates: {},
-      attrition_rates: {},
-      ranking: index + 1,
-      status: visitors === 0 ? "No Data" : conversionRate >= 5 ? "Stable" : "Alert"
-    };
-  });
-  const summary = sources.reduce(function (totals, source) {
-    totals.total_pengunjung += Number(source.pengunjung);
-    totals.total_daftar += Number(source.daftar);
-    totals.total_test += Number(source.test);
-    totals.total_daftar_ulang += Number(source.daftar_ulang);
-    totals.total_berkuliah += Number(source.berkuliah);
-
-    return totals;
-  }, {
-    total_pengunjung: 0,
-    total_daftar: 0,
-    total_test: 0,
-    total_daftar_ulang: 0,
-    total_berkuliah: 0
-  });
-  const result = {
-    range: range,
-    channel: channel,
-    latestDate: latestDate ? latestDate.toISOString().slice(0, 10) : null,
-    rows: filteredRows,
-    sources: sources,
-    summary: summary,
-    conversion_rate: calculateConversionRate(
-      summary.total_pengunjung,
-      summary.total_berkuliah
-    ),
-    source: "daily_channel_traffic"
-  };
-
-  dailyAggregationCache = {
-    key: cacheKey,
-    rowsReference: dailyRows,
-    result: result
-  };
-
-  console.log("FINAL AGGREGATED DATA:", result);
-
-  return result;
+    return `
+      <div class="funnel-stage" style="margin-bottom: 16px;">
+        <div class="stage-label">
+          <strong>${stage.label}</strong>
+          <span><b>${stage.count.toLocaleString("id-ID")}</b> Peserta (${persenTerhadapAwal}%)</span>
+        </div>
+        <div class="bar-bg">
+          <div class="bar-fill" style="width: ${persenTerhadapAwal}%"></div>
+        </div>
+        ${keteranganTahap}
+      </div>
+    `;
+  }).join("");
 }
 
-function getChartDataByDateRange() {
-  const monthlyData = getMonthlyChannelTraffic();
-  const latestMonth = getLatestMonthlyTraffic();
-  const dailySources = getAggregatedDailyData(currentDateRange, "all").sources;
-  const dailyVisitors = dailySources.reduce(function (totals, source) {
-    totals[source.name] = Number(source.pengunjung);
-    return totals;
-  }, {});
-  const dailyChartData = [
-    {
-      month: "Daily Traffic",
-      google_ads: Number(dailyVisitors["Google Ads"] || 0),
-      instagram: Number(dailyVisitors.Instagram || 0),
-      twitter_x: Number(dailyVisitors["Twitter/X"] || 0),
-      website: Number(dailyVisitors.Website || 0)
-    }
-  ];
+function renderMultiYearChart() {
+  const canvas = document.getElementById("monthlyChart");
+  if (!canvas || typeof Chart === "undefined") return;
 
-  if (currentDateRange === "7") {
-    dailyChartData[0].month = "Last 7 Days";
-    return dailyChartData;
-  }
+  const chartRows = appData.multi_year_chart || [];
+  const labels = chartRows.map(r => r.tahun);
 
-  if (currentDateRange === "month" || currentDateRange === "30") {
-    return latestMonth ? [latestMonth] : dailyChartData;
-  }
+  const ctx = canvas.getContext("2d");
+  if (monthlyChart) monthlyChart.destroy();
 
-  if (currentDateRange === "year") {
-    return monthlyData.length > 0 ? monthlyData : dailyChartData;
-  }
-
-  return [];
-}
-
-function getAggregatedYearlyData(channel = currentChannel) {
-  const yearlySources = (Array.isArray(appData.sources) ? appData.sources : [])
-    .filter(function (source) {
-      return channel === "all" || source.name === channel;
-    })
-    .map(function (source) {
-      const visitors = Number(source.pengunjung || 0);
-      const enrolled = Number(source.berkuliah || 0);
-      const conversionRate = calculateConversionRate(visitors, enrolled);
-
-      return {
-        ...source,
-        pengunjung: visitors,
-        daftar: Number(source.daftar || 0),
-        test: Number(source.test || 0),
-        daftar_ulang: Number(source.daftar_ulang || 0),
-        berkuliah: enrolled,
-        conversion_rate: Number(formatConversionRate(conversionRate)),
-        drop_off: visitors > 0 ? Number(formatConversionRate(100 - conversionRate)) : 0
-      };
-    });
-  const summary = yearlySources.reduce(function (totals, source) {
-    totals.total_pengunjung += Number(source.pengunjung);
-    totals.total_daftar += Number(source.daftar);
-    totals.total_test += Number(source.test);
-    totals.total_daftar_ulang += Number(source.daftar_ulang);
-    totals.total_berkuliah += Number(source.berkuliah);
-
-    return totals;
-  }, {
-    total_pengunjung: 0,
-    total_daftar: 0,
-    total_test: 0,
-    total_daftar_ulang: 0,
-    total_berkuliah: 0
-  });
-
-  const yearlyConversionRate = calculateConversionRate(
-    summary.total_pengunjung,
-    summary.total_berkuliah
-  );
-
-  return {
-    range: "year",
-    channel: channel,
-    sources: yearlySources,
-    summary: summary,
-    conversion_rate: Number(formatConversionRate(yearlyConversionRate)),
-    source: "funnel_sources"
-  };
-}
-
-function getMonthlyChannelStageValue(monthRow, trafficKey, stage) {
-  const candidateKeys = [
-    `${trafficKey}_${stage}`,
-    `${stage}_${trafficKey}`
-  ];
-  const matchingKey = candidateKeys.find(function (key) {
-    return Object.prototype.hasOwnProperty.call(monthRow, key);
-  });
-
-  return matchingKey ? Number(monthRow[matchingKey] || 0) : null;
-}
-
-function getAggregatedMonthlyData(channel = currentChannel) {
-  const latestMonth = getLatestMonthlyTraffic();
-
-  if (!latestMonth) {
-    console.warn("Supabase: monthly_channel_traffic kosong. Tidak ada metrik This Month.");
-
-    return {
-      range: "month",
-      channel: channel,
-      sources: [],
-      summary: {
-        total_pengunjung: 0,
-        total_daftar: 0,
-        total_test: 0,
-        total_daftar_ulang: 0,
-        total_berkuliah: 0
+  monthlyChart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: "Pendaftar SNBP",
+          data: chartRows.map(r => r.snbp_p),
+          backgroundColor: "rgba(56, 189, 248, 0.85)",
+          borderRadius: 6
+        },
+        {
+          label: "Pendaftar SNBT",
+          data: chartRows.map(r => r.snbt_p),
+          backgroundColor: "rgba(99, 102, 241, 0.85)",
+          borderRadius: 6
+        },
+        {
+          label: "Pendaftar Mandiri",
+          data: chartRows.map(r => r.mandiri_p),
+          backgroundColor: "rgba(245, 158, 11, 0.85)",
+          borderRadius: 6
+        },
+        {
+          label: "Total Diterima (Lulus)",
+          data: chartRows.map(r => r.snbp_d + r.snbt_d + r.mandiri_d),
+          backgroundColor: "rgba(34, 197, 94, 0.9)",
+          borderRadius: 6
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: "#cbd5e1" } }
       },
-      conversion_rate: 0,
-      source: "monthly_channel_traffic"
-    };
-  }
-
-  const channelEntries = Object.entries(CHANNEL_TRAFFIC_KEYS)
-    .filter(function ([channelName]) {
-      return channel === "all" || channelName === channel;
-    });
-  const hasPerChannelFunnel = channelEntries.every(function ([, trafficKey]) {
-    return ["daftar", "test", "daftar_ulang", "berkuliah"].every(function (stage) {
-      return getMonthlyChannelStageValue(latestMonth, trafficKey, stage) !== null;
-    });
-  });
-  const allPerChannelEntries = Object.entries(CHANNEL_TRAFFIC_KEYS);
-  const perChannelFunnelHasData = allPerChannelEntries.some(function ([, trafficKey]) {
-    return ["daftar", "test", "daftar_ulang", "berkuliah"].some(function (stage) {
-      return Number(getMonthlyChannelStageValue(latestMonth, trafficKey, stage) || 0) > 0;
-    });
-  });
-  let sources = [];
-
-  if (hasPerChannelFunnel && perChannelFunnelHasData) {
-    sources = channelEntries.map(function ([channelName, trafficKey], index) {
-      const visitors = Number(latestMonth[trafficKey] || 0);
-      const daftar = getMonthlyChannelStageValue(latestMonth, trafficKey, "daftar");
-      const test = getMonthlyChannelStageValue(latestMonth, trafficKey, "test");
-      const daftarUlang = getMonthlyChannelStageValue(latestMonth, trafficKey, "daftar_ulang");
-      const enrolled = getMonthlyChannelStageValue(latestMonth, trafficKey, "berkuliah");
-      const conversionRate = calculateConversionRate(visitors, enrolled);
-
-      return {
-        name: channelName,
-        pengunjung: visitors,
-        daftar: daftar,
-        test: test,
-        daftar_ulang: daftarUlang,
-        berkuliah: enrolled,
-        conversion_rate: Number(formatConversionRate(conversionRate)),
-        drop_off: visitors > 0 ? Number(formatConversionRate(100 - conversionRate)) : 0,
-        progression_rates: {},
-        attrition_rates: {},
-        ranking: index + 1,
-        status: visitors === 0 ? "No Data" : conversionRate >= 5 ? "Stable" : "Alert"
-      };
-    });
-  } else if (channel === "all") {
-    if (hasPerChannelFunnel && !perChannelFunnelHasData) {
-      console.warn("Monthly per-channel funnel columns exist but contain zero data.");
+      scales: {
+        x: { ticks: { color: "#cbd5e1" }, grid: { color: "rgba(255,255,255,0.06)" } },
+        y: { beginAtZero: true, ticks: { color: "#cbd5e1" }, grid: { color: "rgba(255,255,255,0.06)" } }
+      }
     }
+  });
+}
 
-    sources = channelEntries.map(function ([channelName, trafficKey], index) {
-      const visitors = Number(latestMonth[trafficKey] || 0);
-      const daftar = Number(getMonthlyChannelStageValue(latestMonth, trafficKey, "daftar") || 0);
-      const test = Number(getMonthlyChannelStageValue(latestMonth, trafficKey, "test") || 0);
-      const daftarUlang = Number(
-        getMonthlyChannelStageValue(latestMonth, trafficKey, "daftar_ulang") || 0
-      );
-      const enrolled = Number(
-        getMonthlyChannelStageValue(latestMonth, trafficKey, "berkuliah") || 0
-      );
-      const conversionRate = calculateConversionRate(visitors, enrolled);
+/* ================= LOGIKA KALKULATOR PELUANG LOLOS & TIDAK LOLOS AKURAT ================= */
+function setupCalculatorForm() {
+  const form = document.getElementById("simulasiForm");
+  if (!form) return;
 
-      return {
-        name: channelName,
-        pengunjung: visitors,
-        daftar: daftar,
-        test: test,
-        daftar_ulang: daftarUlang,
-        berkuliah: enrolled,
-        conversion_rate: Number(formatConversionRate(conversionRate)),
-        drop_off: visitors > 0 ? Number(formatConversionRate(100 - conversionRate)) : 0,
-        progression_rates: {},
-        attrition_rates: {},
-        ranking: index + 1,
-        status: visitors === 0 ? "No Data" : conversionRate >= 5 ? "Stable" : "Alert"
-      };
-    });
-  } else {
-    const [channelName, trafficKey] = channelEntries[0];
-    const visitors = Number(latestMonth[trafficKey] || 0);
+  form.onsubmit = async function (e) {
+    e.preventDefault();
+    const nama = document.getElementById("inputNama").value.trim();
+    const email = document.getElementById("inputEmail").value.trim();
+    const prodiName = document.getElementById("inputProdi").value;
+    const jalur = document.getElementById("inputJalur").value;
+    const nilaiInput = parseFloat(document.getElementById("inputNilai").value);
+    const boxHasil = document.getElementById("hasilSimulasi");
 
-    if (hasPerChannelFunnel && !perChannelFunnelHasData) {
-      console.warn("Monthly per-channel funnel columns exist but contain zero data.");
+    const metricsTahun = getMetricsByRangeAndChannel(currentDateRange, "all");
+    const dataJalur = metricsTahun.sources.find(s => s.name === jalur) || metricsTahun.sources[0];
+    const baseRateJalur = dataJalur.conversion_rate;
+
+    const prodiObj = (appData.prodi_list || []).find(p => p.prodi === prodiName) || {
+      faktor_prodi: 1.0,
+      min_rapor: 82,
+      min_utbk: 540,
+      kuota: 100,
+      peminat_2025: 650,
+      keketatan: "Ketat"
+    };
+
+    let rasioNilai = 1.0;
+    let kategoriNilai = "";
+    if (nilaiInput <= 100) {
+      rasioNilai = nilaiInput / prodiObj.min_rapor;
+      kategoriNilai = `Rata-rata Rapor ${nilaiInput} (Standar Aman Prodi: ${prodiObj.min_rapor})`;
     } else {
-      console.warn(
-        `Supabase: funnel bulanan per channel ${channelName} belum tersedia. Tambahkan kolom ${trafficKey}_daftar, ${trafficKey}_test, ${trafficKey}_daftar_ulang, dan ${trafficKey}_berkuliah.`
-      );
+      rasioNilai = nilaiInput / prodiObj.min_utbk;
+      kategoriNilai = `Skor UTBK ${nilaiInput} (Standar Aman Prodi: ${prodiObj.min_utbk})`;
     }
 
-    sources = [{
-      name: channelName,
-      pengunjung: visitors,
-      daftar: 0,
-      test: 0,
-      daftar_ulang: 0,
-      berkuliah: 0,
-      conversion_rate: 0,
-      drop_off: visitors > 0 ? 100 : 0,
-      progression_rates: {},
-      attrition_rates: {},
-      ranking: 1,
-      status: visitors > 0 ? "Stable" : "No Data"
-    }];
-  }
+    let modifierNilai = Math.pow(rasioNilai, 2.2);
+    let peluangLolos = baseRateJalur * prodiObj.faktor_prodi * modifierNilai;
 
-  let summary = sources.reduce(function (totals, source) {
-    totals.total_pengunjung += Number(source.pengunjung || 0);
-    totals.total_daftar += Number(source.daftar || 0);
-    totals.total_test += Number(source.test || 0);
-    totals.total_daftar_ulang += Number(source.daftar_ulang || 0);
-    totals.total_berkuliah += Number(source.berkuliah || 0);
-    return totals;
-  }, {
-    total_pengunjung: 0,
-    total_daftar: 0,
-    total_test: 0,
-    total_daftar_ulang: 0,
-    total_berkuliah: 0
-  });
+    if (rasioNilai >= 1.0) {
+      peluangLolos = Math.min(92.5, peluangLolos + 28);
+    } else if (rasioNilai >= 0.92) {
+      peluangLolos = Math.min(75.0, peluangLolos + 12);
+    }
 
-  if (channel === "all") {
-    const detailSummary = summary;
+    peluangLolos = Number(Math.max(3.5, Math.min(94.0, peluangLolos)).toFixed(2));
+    const peluangTidakLolos = Number((100 - peluangLolos).toFixed(2));
 
-    summary = {
-      total_pengunjung: Object.values(CHANNEL_TRAFFIC_KEYS).reduce(function (total, trafficKey) {
-        return total + Number(latestMonth[trafficKey] || 0);
-      }, 0),
-      total_daftar: Number(latestMonth.daftar || 0),
-      total_test: Number(latestMonth.test || 0),
-      total_daftar_ulang: Number(latestMonth.daftar_ulang || 0),
-      total_berkuliah: Number(latestMonth.berkuliah || 0)
-    };
+    let statusWebhook = "Dihitung dengan Mesin Analitik Polimedia (Aktifkan Docker di port 4000 untuk memicu Webhook n8n)";
+    try {
+      // Otomatis deteksi apakah sedang berjalan di Laptop (Lokal) atau sudah di Vercel
+      const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      const apiUrl = isLocal ? "http://localhost:4000/api/hitung-peluang" : "/api/hitung-peluang";
 
-    if (
-      hasPerChannelFunnel
-      && perChannelFunnelHasData
-      && (
-        detailSummary.total_daftar !== summary.total_daftar
-        || detailSummary.total_test !== summary.total_test
-        || detailSummary.total_daftar_ulang !== summary.total_daftar_ulang
-        || detailSummary.total_berkuliah !== summary.total_berkuliah
-      )
-    ) {
-      console.warn("Monthly channel detail totals do not match monthly total columns.", {
-        detailSummary: detailSummary,
-        monthlySummary: summary
+      const resp = await fetch(apiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nama, email, prodi: prodiName, jalur, nilai: nilaiInput,
+          tahun_acuan: metricsTahun.yearLabel,
+          persentase_lolos: `${peluangLolos}%`,
+          persentase_tidak_lolos: `${peluangTidakLolos}%`
+        })
       });
+      if (resp.ok) {
+        statusWebhook = "✓ Data berhasil diproses Server & dikirim ke Webhook n8n!";
+      }
+    } catch (_) {
+      // Tetap lanjut menggunakan hasil akurat
     }
-  }
 
-  return {
-    range: "month",
-    channel: channel,
-    sources: sources,
-    summary: summary,
-    conversion_rate: calculateConversionRate(
-      summary.total_pengunjung,
-      summary.total_berkuliah
-    ),
-    source: "monthly_channel_traffic"
+    boxHasil.style.display = "block";
+    boxHasil.innerHTML = `
+      <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+        <strong>Hasil Analisis Peluang: ${nama} (${prodiName} - Jalur ${jalur})</strong>
+        <span style="color:#38bdf8; font-size:0.82rem;">Acuan Data: ${metricsTahun.yearLabel}</span>
+      </div>
+
+      <div style="font-size:0.86rem; color:#cbd5e1; margin-bottom:10px;">
+        • <b>Rasio Dasar Jalur ${jalur}:</b> ${dataJalur.berkuliah.toLocaleString("id-ID")} diterima dari ${dataJalur.pengunjung.toLocaleString("id-ID")} pendaftar (Peluang dasar jalur: <b>${formatPersen(baseRateJalur)}</b>)<br/>
+        • <b>Evaluasi Skor Anda:</b> ${kategoriNilai} — Tingkat Persaingan Prodi: <b>${prodiObj.keketatan}</b>
+      </div>
+
+      <div class="prob-bar-wrap">
+        <div class="prob-bar-pass" style="width: ${Math.max(peluangLolos, 12)}%;">
+          PELUANG LOLOS: ${formatPersen(peluangLolos)}
+        </div>
+        <div class="prob-bar-fail">
+          RISIKO TIDAK LOLOS: ${formatPersen(peluangTidakLolos)}
+        </div>
+      </div>
+
+      <div style="display:flex; gap:14px; flex-wrap:wrap; margin-top:10px;">
+        <span class="pill-pass">✓ Potensi Diterima (Lolos): ${formatPersen(peluangLolos)}</span>
+        <span class="pill-fail">✕ Potensi Gugur (Tidak Lolos): ${formatPersen(peluangTidakLolos)}</span>
+      </div>
+      <small style="display:block; margin-top:10px; color:#94a3b8;">${statusWebhook}</small>
+    `;
   };
 }
 
-function validateFunnelOrder(label, metrics) {
-  const values = [
-    Number(metrics.pengunjung ?? metrics.total_pengunjung ?? 0),
-    Number(metrics.daftar ?? metrics.total_daftar ?? 0),
-    Number(metrics.test ?? metrics.total_test ?? 0),
-    Number(metrics.daftar_ulang ?? metrics.total_daftar_ulang ?? 0),
-    Number(metrics.berkuliah ?? metrics.total_berkuliah ?? 0)
-  ];
-  const isValid = values.every(function (value, index) {
-    return index === 0 || values[index - 1] >= value;
-  });
-
-  if (!isValid) {
-    console.warn(`Invalid funnel order for ${label}.`, {
-      pengunjung: values[0],
-      daftar: values[1],
-      test: values[2],
-      daftar_ulang: values[3],
-      berkuliah: values[4]
-    });
-  }
-}
-
-function recalculateMetricsFromChannelRows(metrics) {
-  const channelRows = (Array.isArray(metrics.sources) ? metrics.sources : []).map(function (source) {
-    const visitors = Number(source.pengunjung || 0);
-    const enrolled = Number(source.berkuliah || 0);
-    const conversionRate = calculateConversionRate(visitors, enrolled);
-
-    return {
-      ...source,
-      pengunjung: visitors,
-      daftar: Number(source.daftar || 0),
-      test: Number(source.test || 0),
-      daftar_ulang: Number(source.daftar_ulang || 0),
-      berkuliah: enrolled,
-      conversion_rate: Number(formatConversionRate(conversionRate)),
-      drop_off: visitors > 0 ? Number(formatConversionRate(100 - conversionRate)) : 0
-    };
-  });
-  const totals = channelRows.reduce(function (result, row) {
-    result.total_pengunjung += row.pengunjung;
-    result.total_daftar += row.daftar;
-    result.total_test += row.test;
-    result.total_daftar_ulang += row.daftar_ulang;
-    result.total_berkuliah += row.berkuliah;
-
-    return result;
-  }, {
-    total_pengunjung: 0,
-    total_daftar: 0,
-    total_test: 0,
-    total_daftar_ulang: 0,
-    total_berkuliah: 0
-  });
-
-  totals.total_conversion_rate = calculateConversionRate(
-    totals.total_pengunjung,
-    totals.total_berkuliah
-  );
-
-  console.log("CHANNEL ROWS", channelRows);
-  console.log("TOTAL RECALCULATED", totals);
-
-  return {
-    ...metrics,
-    sources: channelRows,
-    summary: totals,
-    conversion_rate: totals.total_conversion_rate
-  };
-}
-
-function getMetricsByRangeAndChannel(range = currentDateRange, channel = currentChannel) {
-  let metrics;
-
-  if (range === "month" || range === "30") {
-    metrics = getAggregatedMonthlyData(channel);
-  } else if (range === "year") {
-    metrics = getAggregatedYearlyData(channel);
-  } else {
-    metrics = getAggregatedDailyData("7", channel);
-  }
-
-  metrics = recalculateMetricsFromChannelRows(metrics);
-
-  metrics.sources.forEach(function (source) {
-    validateFunnelOrder(`${metrics.source}:${source.name}`, source);
-  });
-  validateFunnelOrder(`${metrics.source}:summary`, metrics.summary);
-
-  console.log("METRICS SOURCE", {
-    range: range,
-    channel: channel,
-    sourceTable: metrics.source,
-    metrics: metrics
-  });
-
-  return metrics;
-}
-
-/* ================= FILTERED DATA ================= */
-function getFilteredSources() {
-  return getMetricsByRangeAndChannel(currentDateRange, currentChannel).sources;
-}
-
-function getFilteredSummary() {
-  return getMetricsByRangeAndChannel(currentDateRange, currentChannel).summary;
-}
-
-function getDateRangeLabel() {
-  if (currentDateRange === "month" || currentDateRange === "30") return "This Month";
-  if (currentDateRange === "year") return "This Year";
-  return "Last 7 Days";
-}
-
-function getChannelTrafficTitle() {
-  if (currentDateRange === "month" || currentDateRange === "30") {
-    return "This Month Channel Traffic";
-  }
-  if (currentDateRange === "year") return "Monthly Channel Traffic";
-  return "Last 7 Days Channel Traffic";
-}
-
-function formatAnimatedNumber(value, format, decimals) {
-  if (format === "percent") {
-    return `${Number(value).toFixed(decimals)}%`;
-  }
-
-  if (format === "decimal") {
-    return Number(value).toFixed(decimals);
-  }
-
-  return Math.round(Number(value)).toLocaleString("id-ID");
-}
-
-function formatConversionRate(value) {
-  const numericValue = Number(value);
-
-  return Number.isFinite(numericValue) ? numericValue.toFixed(2) : "0.00";
-}
-
-function calculateConversionRate(visitors, enrolled) {
-  const visitorCount = Number(visitors || 0);
-  const enrolledCount = Number(enrolled || 0);
-
-  return visitorCount === 0 ? 0 : (enrolledCount / visitorCount) * 100;
-}
-
-function animateNumber(element, targetValue, options = {}) {
-  const duration = options.duration || 900;
-  const format = options.format || "int";
-  const decimals = Number(options.decimals || 0);
-  const target = Number(targetValue);
-  const startTime = performance.now();
-
-  if (!Number.isFinite(target)) return;
-
-  function updateFrame(now) {
-    const elapsed = now - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-    const easedProgress = 1 - Math.pow(1 - progress, 4);
-    const currentValue = target * easedProgress;
-
-    element.textContent = formatAnimatedNumber(currentValue, format, decimals);
-
-    if (progress < 1) {
-      requestAnimationFrame(updateFrame);
-    } else {
-      element.textContent = formatAnimatedNumber(target, format, decimals);
-    }
-  }
-
-  element.textContent = formatAnimatedNumber(0, format, decimals);
-  requestAnimationFrame(updateFrame);
-}
-
-function animateCountUps() {
-  document.querySelectorAll("[data-count-up]").forEach(function (element) {
-    animateNumber(element, element.dataset.value, {
-      format: element.dataset.format || "int",
-      decimals: element.dataset.decimals || 0,
-      duration: 900
-    });
-  });
-}
-
-function animateProgressBars() {
-  document.querySelectorAll(".bar-fill[data-width]").forEach(function (bar) {
-    bar.style.width = "0%";
-
-    requestAnimationFrame(function () {
-      requestAnimationFrame(function () {
-        bar.style.width = `${bar.dataset.width}%`;
-      });
-    });
-  });
-}
-
-function runDashboardAnimations() {
-  animateCountUps();
-  animateProgressBars();
-}
-
+/* ================= EXPORT LAPORAN ================= */
 function getReportExportMarkup() {
   return `
-    <div class="report-export">
+    <div class="report-export" style="margin-top:14px;">
       <button class="auth-button report-btn" type="button" data-report-toggle>
-        Generate Detailed Report
+        Unduh Laporan Lengkap
       </button>
-
       <div class="export-menu" hidden>
         <button type="button" data-export-type="pdf">Download PDF</button>
         <button type="button" data-export-type="csv">Download Excel/CSV</button>
@@ -1435,814 +848,68 @@ function getReportExportMarkup() {
   `;
 }
 
-function renderEmptyState() {
-  app.innerHTML = `
-    <section class="empty-state">
-      <h2>Data tidak ditemukan</h2>
-      <p>Coba ubah filter channel, rentang tanggal, atau keyword pencarian.</p>
-    </section>
-  `;
-}
-
-/* ================= PAGE RENDER ================= */
-function renderPage(page) {
-  currentPage = page;
-
-  if (monthlyChart) {
-    monthlyChart.destroy();
-    monthlyChart = null;
-  }
-
-  if (page === "overview") renderOverview();
-  if (page === "channel") renderChannelAnalysis();
-  if (page === "funnel") renderFunnelDepth();
-  if (page === "table") renderDataTable();
-
-  runDashboardAnimations();
-  setupReportExport();
-}
-
-/* ================= HELPERS ================= */
-function getTotalConversionRate(metrics = getMetricsByRangeAndChannel(
-  currentDateRange,
-  currentChannel
-)) {
-
-  return formatConversionRate(metrics.conversion_rate);
-}
-
-function getSummaryStages(summary = getFilteredSummary()) {
-
-  return [
-    { label: "Pengunjung", count: Number(summary.total_pengunjung) },
-    { label: "Daftar", count: Number(summary.total_daftar) },
-    { label: "Test", count: Number(summary.total_test) },
-    { label: "Daftar Ulang", count: Number(summary.total_daftar_ulang) },
-    { label: "Berkuliah", count: Number(summary.total_berkuliah) }
-  ];
-}
-
-function getHighestDrop(stages) {
-  let highestDrop = {
-    label: "-",
-    value: 0,
-    percent: 0
-  };
-
-  for (let i = 1; i < stages.length; i++) {
-    const previous = stages[i - 1];
-    const current = stages[i];
-
-    if (previous.count === 0) continue;
-
-    const dropValue = previous.count - current.count;
-    const dropPercent = (dropValue / previous.count) * 100;
-
-    if (dropValue > highestDrop.value) {
-      highestDrop = {
-        label: `${previous.label} ke ${current.label}`,
-        value: dropValue,
-        percent: dropPercent
-      };
-    }
-  }
-
-  return highestDrop;
-}
-
-/* ================= OVERVIEW ================= */
-function renderOverview() {
-  const metrics = getMetricsByRangeAndChannel(currentDateRange, currentChannel);
-  const filteredSources = metrics.sources;
-
-  if (filteredSources.length === 0) {
-    renderEmptyState();
-    return;
-  }
-
-  const summary = metrics.summary;
-  const stages = getSummaryStages(summary);
-  const highestDrop = getHighestDrop(stages);
-
-  const bestSource = [...filteredSources].sort(function (a, b) {
-    return Number(b.conversion_rate) - Number(a.conversion_rate);
-  })[0];
-
-  app.innerHTML = `
-    <section class="page-title">
-      <p>STUDENT ACQUISITION OVERVIEW</p>
-      <h1>Student Acquisition Overview</h1>
-      <span>Monitor ${getDateRangeLabel().toLowerCase()} conversion dynamics and pinpoint friction in the enrollment pipeline.</span>
-    </section>
-
-    <section class="summary">
-      <div class="summary-card">
-        <h3>Total Visitors</h3>
-        <p data-count-up data-value="${summary.total_pengunjung}">${summary.total_pengunjung.toLocaleString("id-ID")}</p>
-      </div>
-
-      <div class="summary-card">
-        <h3>Qualified Leads</h3>
-        <p data-count-up data-value="${summary.total_daftar}">${summary.total_daftar.toLocaleString("id-ID")}</p>
-      </div>
-
-      <div class="summary-card">
-        <h3>Conversion Rate</h3>
-        <p data-count-up data-value="${getTotalConversionRate(metrics)}" data-format="percent" data-decimals="2">${getTotalConversionRate(metrics)}%</p>
-      </div>
-    </section>
-
-    <section class="dashboard-grid">
-      <div class="card">
-        <div class="section-header">
-          <div>
-            <h2>Acquisition Funnel</h2>
-            <span>Visitor-to-Enrollment Flow</span>
-          </div>
-        </div>
-
-        <div id="overviewFunnel"></div>
-      </div>
-
-      <aside class="card insight-card">
-        <h2>Key Insight</h2>
-
-        <div class="insight-value" data-count-up data-value="${highestDrop.percent.toFixed(1)}" data-format="percent" data-decimals="1">${highestDrop.percent.toFixed(1)}%</div>
-
-        <p>
-          Significant drop-off detected between
-          <strong>${highestDrop.label}</strong>.
-          Total users lost: <span data-count-up data-value="${highestDrop.value}">${highestDrop.value.toLocaleString("id-ID")}</span>.
-        </p>
-
-        <hr />
-
-        <p>
-          Best channel:
-          <strong>${bestSource.name}</strong>
-          with conversion rate ${formatConversionRate(bestSource.conversion_rate)}%.
-        </p>
-
-        ${getReportExportMarkup()}
-      </aside>
-    </section>
-  `;
-
-  renderFunnelBars("overviewFunnel", stages);
-}
-
-/* ================= CHANNEL ANALYSIS ================= */
-function renderChannelAnalysis() {
-  const metrics = getMetricsByRangeAndChannel(currentDateRange, currentChannel);
-  const filteredSources = metrics.sources;
-
-  if (filteredSources.length === 0) {
-    renderEmptyState();
-    return;
-  }
-
-  const channelCards = filteredSources.map(function (source) {
-    const badgeClass = source.status === "Alert" ? "risk" : "stable";
-
-    return `
-      <div class="channel-card">
-        <div class="channel-top">
-          <h2>${source.name}</h2>
-          <span class="badge ${badgeClass}">${source.status}</span>
-        </div>
-
-        <p class="label">Visitors</p>
-        <h3 data-count-up data-value="${Number(source.pengunjung)}">${Number(source.pengunjung).toLocaleString("id-ID")}</h3>
-
-        <div class="channel-stats">
-          <div>
-            <span>Converted</span>
-            <strong data-count-up data-value="${Number(source.berkuliah)}">${source.berkuliah}</strong>
-          </div>
-
-          <div>
-            <span>Conv. Rate</span>
-            <strong data-count-up data-value="${Number(source.conversion_rate)}" data-format="percent" data-decimals="2">${formatConversionRate(source.conversion_rate)}%</strong>
-          </div>
-        </div>
-      </div>
-    `;
-  }).join("");
-
-  app.innerHTML = `
-    <section class="page-title">
-      <p>ACQUISITION SOURCES</p>
-      <h1>Channel Performance</h1>
-      <span>${getDateRangeLabel()} engagement and conversion tracking across acquisition sources.</span>
-    </section>
-
-    <section class="channel-grid">
-      ${channelCards}
-    </section>
-
-    <section class="card">
-      <h2>${getChannelTrafficTitle()}</h2>
-      <p class="label">${getDateRangeLabel()} visitor volume across all acquisition channels.</p>
-      <canvas id="monthlyChart"></canvas>
-    </section>
-  `;
-
-  renderMonthlyChart();
-}
-
-/* ================= FUNNEL DEPTH ================= */
-function renderFunnelDepth() {
-  const metrics = getMetricsByRangeAndChannel(currentDateRange, currentChannel);
-  const filteredSources = metrics.sources;
-
-  if (filteredSources.length === 0) {
-    renderEmptyState();
-    return;
-  }
-
-  const stages = getSummaryStages(metrics.summary);
-  const highestDrop = getHighestDrop(stages);
-
-  app.innerHTML = `
-    <section class="page-title">
-      <p>ACQUISITION INTELLIGENCE</p>
-      <h1>Funnel Depth Analysis</h1>
-      <span>Tracking ${getDateRangeLabel().toLowerCase()} prospective student progression from initial website visit to confirmed enrollment.</span>
-    </section>
-
-    <section class="dashboard-grid">
-      <div class="card">
-        <h2>Conversion Stages</h2>
-        <div id="depthFunnel"></div>
-      </div>
-
-      <aside>
-        <div class="card friction-card">
-          <h2>Registration Friction</h2>
-          <p>
-            The <strong>${highestDrop.percent.toFixed(1)}% drop</strong>
-            between ${highestDrop.label} indicates friction in the onboarding process.
-          </p>
-        </div>
-
-        <div class="card">
-          <h3>Final Yield</h3>
-          <div class="final-yield" data-count-up data-value="${getTotalConversionRate(metrics)}" data-format="percent" data-decimals="2">${getTotalConversionRate(metrics)}%</div>
-          <p>Overall conversion from visitor to enrolled student.</p>
-          ${getReportExportMarkup()}
-        </div>
-      </aside>
-    </section>
-  `;
-
-  renderFunnelBars("depthFunnel", stages);
-}
-
-/* ================= DATA TABLE ================= */
-function renderDataTable() {
-  const metrics = getMetricsByRangeAndChannel(currentDateRange, currentChannel);
-  const filteredSources = metrics.sources;
-
-  if (filteredSources.length === 0) {
-    renderEmptyState();
-    return;
-  }
-
-  const summary = metrics.summary;
-
-  const rows = filteredSources.map(function (source) {
-    return `
-      <tr>   
-        <td>${source.name}</td>
-        <td data-count-up data-value="${Number(source.pengunjung)}">${Number(source.pengunjung).toLocaleString("id-ID")}</td>
-        <td data-count-up data-value="${Number(source.daftar)}">${Number(source.daftar).toLocaleString("id-ID")}</td>
-        <td data-count-up data-value="${Number(source.test)}">${Number(source.test).toLocaleString("id-ID")}</td>
-        <td data-count-up data-value="${Number(source.daftar_ulang)}">${Number(source.daftar_ulang).toLocaleString("id-ID")}</td>
-        <td data-count-up data-value="${Number(source.berkuliah)}">${Number(source.berkuliah).toLocaleString("id-ID")}</td>
-        <td data-count-up data-value="${Number(source.conversion_rate)}" data-format="percent" data-decimals="2">${formatConversionRate(source.conversion_rate)}%</td>
-        <td>${source.status}</td>
-      </tr>
-    `;
-  }).join("");
-
-  app.innerHTML = `
-    <section class="page-title">
-      <p>ANALYTICS DATA</p>
-      <h1>Acquisition Grid</h1>
-      <span>Analyze ${getDateRangeLabel().toLowerCase()} student performance data across primary digital channels.</span>
-    </section>
-
-    <section class="summary">
-      <div class="summary-card">
-        <h3>Total Visitors</h3>
-        <p data-count-up data-value="${summary.total_pengunjung}">${summary.total_pengunjung.toLocaleString("id-ID")}</p>
-      </div>
-
-      <div class="summary-card">
-        <h3>Average CVR</h3>
-        <p data-count-up data-value="${getTotalConversionRate(metrics)}" data-format="percent" data-decimals="2">${getTotalConversionRate(metrics)}%</p>
-      </div>
-
-      <div class="summary-card">
-        <h3>Active Channels</h3>
-        <p data-count-up data-value="${filteredSources.length}">${filteredSources.length}</p>
-      </div>
-    </section>
-
-    <section class="card">
-      <table class="data-table">
-        <thead>
-          <tr>
-            <th>Channel Source</th>
-            <th>Pengunjung</th>
-            <th>Daftar</th>
-            <th>Test</th>
-            <th>Daftar Ulang</th>
-            <th>Berkuliah</th>
-            <th>CVR</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          ${rows}
-
-          <tr class="total-row">
-            <td>TOTAL</td>
-            <td data-count-up data-value="${summary.total_pengunjung}">${summary.total_pengunjung.toLocaleString("id-ID")}</td>
-            <td data-count-up data-value="${summary.total_daftar}">${summary.total_daftar.toLocaleString("id-ID")}</td>
-            <td data-count-up data-value="${summary.total_test}">${summary.total_test.toLocaleString("id-ID")}</td>
-            <td data-count-up data-value="${summary.total_daftar_ulang}">${summary.total_daftar_ulang.toLocaleString("id-ID")}</td>
-            <td data-count-up data-value="${summary.total_berkuliah}">${summary.total_berkuliah.toLocaleString("id-ID")}</td>
-            <td data-count-up data-value="${getTotalConversionRate(metrics)}" data-format="percent" data-decimals="2">${getTotalConversionRate(metrics)}%</td>
-            <td>Overall</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-  `;
-}
-
-/* ================= FUNNEL BAR ================= */
-function renderFunnelBars(containerId, stages) {
-  const container = document.getElementById(containerId);
-  const firstCount = stages[0].count;
-
-  container.innerHTML = stages.map(function (stage, index) {
-    const width = firstCount === 0 ? 0 : (stage.count / firstCount) * 100;
-
-    let dropText = "";
-
-    if (index > 0) {
-      const previous = stages[index - 1];
-
-      if (previous.count > 0) {
-        const drop = previous.count - stage.count;
-        const dropPercent = (drop / previous.count) * 100;
-
-        dropText = `
-          <div class="drop">
-            ${dropPercent.toFixed(1)}% drop-off
-          </div>
-        `;
-      }
-    }
-
-    return `
-      <div class="funnel-stage">
-        <div class="stage-label">
-          <strong>${stage.label}</strong>
-          <span data-count-up data-value="${stage.count}">${stage.count.toLocaleString("id-ID")}</span>
-        </div>
-
-        <div class="bar-bg">
-          <div class="bar-fill" data-width="${width}" style="width: 0%"></div>
-        </div>
-
-        ${dropText}
-      </div>
-    `;
-  }).join("");
-}
-
-/* ================= CHART ================= */
-function getSmoothChartOptions() {
-  return {
-    responsive: true,
-    animation: {
-      duration: 1200,
-      easing: "easeOutQuart"
-    },
-    transitions: {
-      active: {
-        animation: {
-          duration: 400
-        }
-      },
-      resize: {
-        animation: {
-          duration: 600
-        }
-      },
-      show: {
-        animations: {
-          x: {
-            from: 0,
-            duration: 900,
-            easing: "easeOutQuart"
-          },
-          y: {
-            from: 0,
-            duration: 900,
-            easing: "easeOutQuart"
-          }
-        }
-      },
-      hide: {
-        animation: {
-          duration: 300
-        }
-      }
-    },
-    hover: {
-      mode: "nearest",
-      intersect: true,
-      animationDuration: 250
-    },
-    plugins: {
-      legend: {
-        labels: {
-          color: "#cbd5e1"
-        }
-      }
-    },
-    scales: {
-      x: {
-        ticks: { color: "#cbd5e1" },
-        grid: { color: "rgba(255,255,255,0.06)" }
-      },
-      y: {
-        beginAtZero: true,
-        ticks: { color: "#cbd5e1" },
-        grid: { color: "rgba(255,255,255,0.06)" }
-      }
-    }
-  };
-}
-
-function renderMonthlyChart() {
-  if (typeof Chart === "undefined") {
-    const chart = document.getElementById("monthlyChart");
-
-    if (chart) {
-      const chartMessage = document.createElement("div");
-      chartMessage.className = "empty-state";
-      chartMessage.innerHTML = `
-        <h2>Grafik belum tersedia</h2>
-        <p>Chart.js gagal dimuat. Data channel tetap bisa dibaca.</p>
-      `;
-
-      chart.replaceWith(chartMessage);
-    }
-
-    return;
-  }
-
-  const monthlyData = getChartDataByDateRange();
-
-  const labels = monthlyData.map(item => item.month);
-  const googleAds = monthlyData.map(item => item.google_ads);
-  const instagram = monthlyData.map(item => item.instagram);
-  const twitterX = monthlyData.map(item => item.twitter_x);
-  const website = monthlyData.map(item => item.website);
-
-  const ctx = document.getElementById("monthlyChart").getContext("2d");
-
-  if (monthlyChart) {
-    monthlyChart.destroy();
-    monthlyChart = null;
-  }
-
-  monthlyChart = new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels: labels,
-      datasets: [
-        {
-          label: "Google Ads",
-          data: googleAds,
-          backgroundColor: "rgba(79, 140, 255, 0.7)",
-          hoverBackgroundColor: "rgba(79, 140, 255, 0.95)",
-          hoverBorderColor: "rgba(191, 219, 254, 0.95)",
-          hoverBorderWidth: 2
-        },
-        {
-          label: "Instagram",
-          data: instagram,
-          backgroundColor: "rgba(0, 212, 255, 0.7)",
-          hoverBackgroundColor: "rgba(0, 212, 255, 0.95)",
-          hoverBorderColor: "rgba(207, 250, 254, 0.95)",
-          hoverBorderWidth: 2
-        },
-        {
-          label: "Twitter/X",
-          data: twitterX,
-          backgroundColor: "rgba(255, 99, 132, 0.7)",
-          hoverBackgroundColor: "rgba(255, 99, 132, 0.95)",
-          hoverBorderColor: "rgba(255, 228, 230, 0.95)",
-          hoverBorderWidth: 2
-        },
-        {
-          label: "Website",
-          data: website,
-          backgroundColor: "rgba(34, 197, 94, 0.7)",
-          hoverBackgroundColor: "rgba(34, 197, 94, 0.95)",
-          hoverBorderColor: "rgba(220, 252, 231, 0.95)",
-          hoverBorderWidth: 2
-        }
-      ]
-    },
-    options: getSmoothChartOptions()
-  });
-}
-
-/* ================= DOWNLOAD REPORT ================= */
-function getReportFileName(extension) {
-  const period = getDateRangeLabel().toLowerCase().replace(/\s+/g, "-");
-  const channel = (currentChannel === "all" ? "all-channels" : currentChannel)
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "");
-
-  return `edufunnel-report-${period}-${channel}.${extension}`;
-}
-
-function getCurrentReportData() {
-  if (!appData) {
-    return null;
-  }
-
-  const summary = getFilteredSummary();
-  const funnelData = getSummaryStages();
-  const sources = getFilteredSources();
-  const highestDrop = getHighestDrop(funnelData);
-  const bestSource = sources.length > 0
-    ? [...sources].sort(function (a, b) {
-      return Number(b.conversion_rate) - Number(a.conversion_rate);
-    })[0]
-    : null;
-
-  return {
-    title: "EduFunnel Detailed Report",
-    metadata: appData.metadata || {},
-    selectedPeriod: getDateRangeLabel(),
-    selectedChannel: currentChannel === "all" ? "All Channels" : currentChannel,
-    selectedPeriodValue: currentDateRange,
-    summary: summary,
-    funnelData: funnelData,
-    sources: sources,
-    chartData: getChartDataByDateRange(),
-    highestDrop: highestDrop,
-    bestSource: bestSource,
-    generatedAt: new Date().toLocaleString("id-ID")
-  };
-}
-
-function downloadBlob(content, filename, type) {
-  const blob = new Blob([content], { type: type });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-
-  link.href = url;
-  link.download = filename;
-  link.click();
-
-  URL.revokeObjectURL(url);
-}
-
-function downloadJSONReport() {
-  const reportData = getCurrentReportData();
-
-  if (!reportData) {
-    alert("Data belum siap.");
-    return;
-  }
-
-  const jsonData = JSON.stringify(reportData, null, 2);
-  downloadBlob(jsonData, getReportFileName("json"), "application/json");
-}
-
-function escapeCSVValue(value) {
-  const text = String(value ?? "");
-
-  if (/[",\n]/.test(text)) {
-    return `"${text.replace(/"/g, '""')}"`;
-  }
-
-  return text;
-}
-
-function addCSVRow(rows, values) {
-  rows.push(values.map(escapeCSVValue).join(","));
-}
-
-function downloadCSVReport() {
-  const reportData = getCurrentReportData();
-
-  if (!reportData) {
-    alert("Data belum siap.");
-    return;
-  }
-
-  const rows = [];
-
-  addCSVRow(rows, ["EduFunnel Detailed Report"]);
-  addCSVRow(rows, ["Generated At", reportData.generatedAt]);
-  addCSVRow(rows, ["Period", reportData.selectedPeriod]);
-  addCSVRow(rows, ["Channel", reportData.selectedChannel]);
-  rows.push("");
-
-  addCSVRow(rows, ["Summary"]);
-  addCSVRow(rows, ["Metric", "Value"]);
-  addCSVRow(rows, ["Total Visitors", reportData.summary.total_pengunjung]);
-  addCSVRow(rows, ["Qualified Leads", reportData.summary.total_daftar]);
-  addCSVRow(rows, ["Conversion Rate", `${getTotalConversionRate()}%`]);
-  rows.push("");
-
-  addCSVRow(rows, ["Funnel Data"]);
-  addCSVRow(rows, ["Stage", "Value"]);
-  reportData.funnelData.forEach(function (stage) {
-    addCSVRow(rows, [stage.label, stage.count]);
-  });
-  rows.push("");
-
-  addCSVRow(rows, ["Channel Data"]);
-  addCSVRow(rows, [
-    "Channel Source",
-    "Pengunjung",
-    "Daftar",
-    "Test",
-    "Daftar Ulang",
-    "Berkuliah",
-    "CVR",
-    "Status"
-  ]);
-
-  reportData.sources.forEach(function (source) {
-    addCSVRow(rows, [
-      source.name,
-      source.pengunjung,
-      source.daftar,
-      source.test,
-      source.daftar_ulang,
-      source.berkuliah,
-      `${formatConversionRate(source.conversion_rate)}%`,
-      source.status
-    ]);
-  });
-
-  downloadBlob(rows.join("\n"), getReportFileName("csv"), "text/csv;charset=utf-8");
-}
-
-function addPDFLine(doc, label, value, x, y) {
-  doc.text(`${label}: ${value}`, x, y);
-}
-
-function downloadPDFReport() {
-  const reportData = getCurrentReportData();
-
-  if (!reportData) {
-    alert("Data belum siap.");
-    return;
-  }
-
-  if (!window.jspdf || !window.jspdf.jsPDF) {
-    alert("Library PDF belum siap. Coba refresh halaman.");
-    return;
-  }
-
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  const left = 14;
-  let y = 18;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.text("EduFunnel Detailed Report", left, y);
-
-  y += 10;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  addPDFLine(doc, "Generated At", reportData.generatedAt, left, y);
-  y += 6;
-  addPDFLine(doc, "Period", reportData.selectedPeriod, left, y);
-  y += 6;
-  addPDFLine(doc, "Channel", reportData.selectedChannel, left, y);
-
-  y += 12;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text("Summary Metrics", left, y);
-
-  y += 8;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  addPDFLine(doc, "Total Visitors", reportData.summary.total_pengunjung.toLocaleString("id-ID"), left, y);
-  y += 6;
-  addPDFLine(doc, "Qualified Leads", reportData.summary.total_daftar.toLocaleString("id-ID"), left, y);
-  y += 6;
-  addPDFLine(doc, "Conversion Rate", `${getTotalConversionRate()}%`, left, y);
-
-  y += 12;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text("Funnel Stages", left, y);
-
-  y += 8;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  reportData.funnelData.forEach(function (stage) {
-    addPDFLine(doc, stage.label, stage.count.toLocaleString("id-ID"), left, y);
-    y += 6;
-  });
-
-  y += 6;
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13);
-  doc.text("Insights", left, y);
-
-  y += 8;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  addPDFLine(doc, "Highest Drop-off", `${reportData.highestDrop.percent.toFixed(1)}% (${reportData.highestDrop.label})`, left, y);
-  y += 6;
-  addPDFLine(doc, "Users Lost", reportData.highestDrop.value.toLocaleString("id-ID"), left, y);
-  y += 6;
-  addPDFLine(
-    doc,
-    "Best Channel",
-    reportData.bestSource
-      ? `${reportData.bestSource.name} (${formatConversionRate(reportData.bestSource.conversion_rate)}%)`
-      : "-",
-    left,
-    y
-  );
-
-  if (monthlyChart) {
-    try {
-      const chartImage = monthlyChart.toBase64Image();
-      y += 12;
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(13);
-      doc.text("Chart Snapshot", left, y);
-      y += 5;
-      doc.addImage(chartImage, "PNG", left, y, 180, 80);
-    } catch (error) {
-      console.warn("Chart image tidak bisa ditambahkan ke PDF:", error);
-    }
-  }
-
-  doc.save(getReportFileName("pdf"));
-}
-
 function setupReportExport() {
   document.querySelectorAll("[data-report-toggle]").forEach(function (toggle) {
     toggle.onclick = function () {
-      const exportMenu = toggle.closest(".report-export").querySelector(".export-menu");
-      exportMenu.hidden = !exportMenu.hidden;
+      const menu = toggle.closest(".report-export").querySelector(".export-menu");
+      menu.hidden = !menu.hidden;
     };
   });
-
-  document.querySelectorAll("[data-export-type]").forEach(function (button) {
-    button.onclick = function () {
-      const exportMenu = button.closest(".export-menu");
-      const exportType = button.dataset.exportType;
-
-      exportMenu.hidden = true;
-
-      if (exportType === "pdf") downloadPDFReport();
-      if (exportType === "csv") downloadCSVReport();
-      if (exportType === "json") downloadJSONReport();
+  document.querySelectorAll("[data-export-type]").forEach(function (btn) {
+    btn.onclick = function () {
+      const type = btn.dataset.exportType;
+      btn.closest(".export-menu").hidden = true;
+      const m = getMetricsByRangeAndChannel(currentDateRange, currentChannel);
+      if (type === "json") {
+        const blob = new Blob([JSON.stringify(m, null, 2)], { type: "application/json" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `polimedia-${currentDateRange}.json`;
+        link.click();
+      } else if (type === "csv") {
+        const rows = [
+          ["Periode", m.yearLabel],
+          ["Jalur", "Pendaftar", "Diterima (Lolos)", "Tidak Lolos", "% Lolos", "% Tidak Lolos"]
+        ];
+        m.sources.forEach(s => {
+          rows.push([s.name, s.pengunjung, s.berkuliah, s.ditolak, `${s.conversion_rate}%`, `${s.drop_off}%`]);
+        });
+        const blob = new Blob([rows.map(r => r.join(",")).join("\n")], { type: "text/csv" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `polimedia-${currentDateRange}.csv`;
+        link.click();
+      } else if (type === "pdf" && window.jspdf) {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        doc.setFontSize(14);
+        doc.text(`Laporan PMB Polimedia - ${m.yearLabel}`, 14, 18);
+        doc.setFontSize(10);
+        doc.text(`Total Pendaftar: ${m.summary.total_pengunjung.toLocaleString("id-ID")}`, 14, 28);
+        doc.text(`Total Diterima (Lolos): ${m.summary.total_berkuliah.toLocaleString("id-ID")} (${formatPersen(m.conversion_rate)})`, 14, 35);
+        doc.text(`Total Tidak Lolos: ${m.summary.total_ditolak.toLocaleString("id-ID")} (${formatPersen(m.fail_rate)})`, 14, 42);
+        let y = 54;
+        m.sources.forEach(s => {
+          doc.text(`- Jalur ${s.name}: Pendaftar ${s.pengunjung} | Lolos ${s.berkuliah} (${s.conversion_rate}%) | Gagal ${s.ditolak} (${s.drop_off}%)`, 14, y);
+          y += 8;
+        });
+        doc.save(`polimedia-${currentDateRange}.pdf`);
+      }
     };
   });
-}
-
-function downloadReport() {
-  downloadJSONReport();
 }
 
 /* ================= INIT ================= */
 window.addEventListener("load", async function () {
   try {
-    const user = await getCurrentSupabaseUser();
-
-    if (user) {
+    const client = createSupabaseClient();
+    const { data } = await client.auth.getUser();
+    if (data && data.user) {
       showDashboardPage();
       return;
     }
-  } catch (error) {
-    console.error("Gagal mengecek session Supabase:", error);
+  } catch (err) {
+    console.warn("Belum ada sesi login aktif:", err);
   }
-
-  showRegisterPage();
+  showLoginPage();
 });

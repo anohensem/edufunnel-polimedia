@@ -4,86 +4,234 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <title>EduFunnel</title>
+  <title>EduFunnel Polimedia - Kalkulator & Analitik Peluang Masuk</title>
 
   <!-- Supabase client -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-  <!-- Chart.js: direct dist path avoids the broken package-root source map URL. -->
+  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
 
   <!-- jsPDF -->
   <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 
-  <!-- CSS -->
+  <!-- CSS Utama -->
   <link rel="stylesheet" href="css/style.css" />
+
+  <!-- Styling Tambahan Agar Lebih User-Friendly & Mudah Dipahami -->
+  <style>
+    .simulasi-box {
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 22px 24px;
+      margin: 20px 24px 0 24px;
+      color: #f8fafc;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+    }
+    .simulasi-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+      gap: 12px;
+    }
+    .simulasi-header h3 {
+      margin: 0 0 4px 0;
+      font-size: 1.2rem;
+      color: #38bdf8;
+    }
+    .simulasi-badge {
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      padding: 5px 12px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .simulasi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+      gap: 14px;
+      align-items: end;
+    }
+    .simulasi-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .simulasi-field label {
+      font-size: 0.8rem;
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+    .simulasi-field input,
+    .simulasi-field select {
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: #ffffff;
+      font-size: 0.88rem;
+      outline: none;
+    }
+    .simulasi-field input:focus,
+    .simulasi-field select:focus {
+      border-color: #38bdf8;
+    }
+    .simulasi-btn {
+      padding: 10px 18px;
+      border-radius: 8px;
+      border: none;
+      background: #0284c7;
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      height: 41px;
+    }
+    .simulasi-btn:hover {
+      background: #0369a1;
+      transform: translateY(-1px);
+    }
+    .simulasi-result {
+      margin-top: 18px;
+      padding: 18px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid #334155;
+      display: none;
+    }
+    .prob-bar-wrap {
+      width: 100%;
+      height: 26px;
+      background: #ef4444;
+      border-radius: 999px;
+      overflow: hidden;
+      display: flex;
+      margin: 12px 0;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+    .prob-bar-pass {
+      background: #22c55e;
+      color: #052e16;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: width 0.6s ease;
+      white-space: nowrap;
+      padding: 0 8px;
+    }
+    .prob-bar-fail {
+      background: #ef4444;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      white-space: nowrap;
+      padding: 0 8px;
+    }
+    .pill-pass {
+      background: rgba(34, 197, 94, 0.18);
+      color: #4ade80;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-weight: 700;
+    }
+    .pill-fail {
+      background: rgba(239, 68, 68, 0.18);
+      color: #f87171;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-weight: 700;
+    }
+    .info-banner {
+      background: rgba(245, 158, 11, 0.15);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fcd34d;
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin-bottom: 18px;
+      font-size: 0.9rem;
+    }
+    .summary-4 {
+      display: grid !important;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
+      gap: 16px !important;
+    }
+  </style>
 </head>
 
 <body>
   <!-- REGISTER PAGE -->
   <section id="registerPage" class="auth-page">
-    <div class="auth-brand">EduFunnel</div>
+    <div class="auth-brand">EduFunnel Polimedia - Analitik PMB</div>
 
     <div class="auth-wrapper">
       <div class="auth-card">
-        <h1>Welcome to EduFunnel</h1>
-        <p>Create your institutional account to get started</p>
+        <h1>Selamat Datang di EduFunnel Polimedia</h1>
+        <p>Buat akun untuk mengakses analitik & kalkulator peluang masuk Polimedia</p>
 
         <form id="registerForm">
-          <label for="registerName">Full Name</label>
-          <input type="text" id="registerName" placeholder="Dr. Jane Smith" required />
+          <label for="registerName">Nama Lengkap</label>
+          <input type="text" id="registerName" placeholder="Budi Santoso" required />
 
-          <label for="registerEmail">Institutional Email</label>
-          <input type="email" id="registerEmail" placeholder="jane.smith@university.edu" required />
+          <label for="registerEmail">Email Aktif</label>
+          <input type="email" id="registerEmail" placeholder="budi@polimedia.ac.id" required />
 
-          <label for="registerPassword">Password</label>
+          <label for="registerPassword">Password (Min. 6 Karakter)</label>
           <input type="password" id="registerPassword" placeholder="********" required />
 
-          <label for="confirmPassword">Confirm Password</label>
+          <label for="confirmPassword">Konfirmasi Password</label>
           <input type="password" id="confirmPassword" placeholder="********" required />
 
-          <button type="submit" class="auth-button">Create Account</button>
+          <button type="submit" class="auth-button">Daftar Akun</button>
         </form>
 
         <p class="auth-link">
-          Already have an account?
-          <button id="goToLogin" type="button">Sign in</button>
+          Sudah punya akun?
+          <button id="goToLogin" type="button">Masuk di sini</button>
         </p>
       </div>
     </div>
 
-    <div class="auth-footer">&copy; 2026 EduFunnel Analytics</div>
+    <div class="auth-footer">&copy; 2026 EduFunnel Polimedia - Politeknik Negeri Media Kreatif</div>
   </section>
 
   <!-- LOGIN PAGE -->
   <section id="loginPage" class="auth-page hidden">
-    <div class="auth-brand">EduFunnel</div>
+    <div class="auth-brand">EduFunnel Polimedia - Analitik PMB</div>
 
     <div class="auth-wrapper">
       <div class="auth-card">
-        <div class="auth-icon">EF</div>
+        <div class="auth-icon">PM</div>
 
-        <h1>Welcome Back</h1>
-        <p>Enter your credentials to access your dashboard</p>
+        <h1>Masuk ke Dashboard</h1>
+        <p>Gunakan akun Anda untuk melihat statistik seleksi & peluang prodi</p>
 
         <form id="loginForm">
-          <label for="loginEmail">Email Address</label>
-          <input type="email" id="loginEmail" placeholder="admin@institution.edu" required />
+          <label for="loginEmail">Alamat Email</label>
+          <input type="email" id="loginEmail" placeholder="admin@polimedia.ac.id" required />
 
           <label for="loginPassword">Password</label>
           <input type="password" id="loginPassword" placeholder="********" required />
 
-          <button type="submit" class="auth-button">Sign In &rarr;</button>
+          <button type="submit" class="auth-button">Masuk Dashboard &rarr;</button>
         </form>
 
         <p class="auth-link">
-          Don't have an account?
-          <button id="goToRegister" type="button">Create account</button>
+          Belum punya akun?
+          <button id="goToRegister" type="button">Daftar sekarang</button>
         </p>
       </div>
     </div>
 
-    <div class="auth-footer">&copy; 2026 EduFunnel Analytics</div>
+    <div class="auth-footer">&copy; 2026 EduFunnel Polimedia - Politeknik Negeri Media Kreatif</div>
   </section>
 
   <!-- DASHBOARD PAGE -->
@@ -91,46 +239,50 @@
     <aside class="sidebar">
       <div class="sidebar-main">
         <div class="brand">
-          <div class="logo">EF</div>
+          <div class="logo">PM</div>
           <div>
-            <h2>EduFunnel</h2>
-            <p>Intelligence Suite</p>
+            <h2>EduFunnel Polimedia</h2>
+            <p>Analitik & Prediksi Peluang</p>
           </div>
         </div>
 
         <nav class="menu">
-          <button type="button" class="menu-item active" data-page="overview">Overview</button>
-          <button type="button" class="menu-item" data-page="channel">Channel Analysis</button>
-          <button type="button" class="menu-item" data-page="funnel">Funnel Depth</button>
-          <button type="button" class="menu-item" data-page="table">Data Tables</button>
+          <button type="button" class="menu-item active" data-page="overview">Ringkasan Peluang</button>
+          <button type="button" class="menu-item" data-page="channel">Perbandingan Jalur</button>
+          <button type="button" class="menu-item" data-page="funnel">Tahapan Seleksi</button>
+          <button type="button" class="menu-item" data-page="table">Tabel Tahun & 16 Prodi</button>
         </nav>
       </div>
 
       <div class="sidebar-bottom">
-        <button type="button" id="logoutButton">Logout</button>
+        <button type="button" id="logoutButton">Keluar (Logout)</button>
       </div>
     </aside>
 
     <main class="main-content">
       <header class="dashboard-header">
         <div class="filter-group">
-          <select id="channelFilter">
-            <option value="all">All Channels</option>
-            <option value="Google Ads">Google Ads</option>
-            <option value="Instagram">Instagram</option>
-            <option value="Twitter/X">Twitter/X</option>
-            <option value="Website">Website</option>
+          <!-- Filter Jalur Seleksi -->
+          <select id="channelFilter" title="Pilih Jalur Seleksi">
+            <option value="all">Semua Jalur Seleksi (SNBP, SNBT, Mandiri)</option>
+            <option value="SNBP">Jalur SNBP (Prestasi Rapor)</option>
+            <option value="SNBT">Jalur SNBT (Tes UTBK)</option>
+            <option value="Mandiri">Jalur Mandiri Polimedia</option>
           </select>
 
-          <select id="dateFilter">
-            <option value="7">Last 7 Days</option>
-            <option value="month">This Month</option>
-            <option value="year">This Year</option>
+          <!-- Filter Tahun Sesuai Permintaan: 2022, 2023, 2024, 2025, Keseluruhan, dan Prediksi 2026 -->
+          <select id="dateFilter" title="Pilih Tahun Data PMB">
+            <option value="2022">Tahun 2022</option>
+            <option value="2023">Tahun 2023</option>
+            <option value="2024">Tahun 2024</option>
+            <option value="2025" selected>Tahun 2025</option>
+            <option value="all_years">Keseluruhan (2022–2025)</option>
+            <option value="prediksi_2026">Prediksi Tahun 2026 (Proyeksi Tren)</option>
           </select>
         </div>
 
         <div class="header-actions">
-          <div class="avatar" title="Profile">
+          <div class="avatar" title="Profil Pengguna">
             <svg class="avatar-icon" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M20 21a8 8 0 0 0-16 0" />
               <circle cx="12" cy="7" r="4" />
@@ -139,13 +291,86 @@
         </div>
       </header>
 
+      <!-- FITUR PRODUK: KALKULATOR SIMULASI PELUANG LOLOS & TIDAK LOLOS -->
+      <section class="simulasi-box">
+        <div class="simulasi-header">
+          <div>
+            <h3>Kalkulator Simulasi Peluang Lolos & Tidak Lolos Polimedia</h3>
+            <small style="color: #94a3b8;">
+              Hitung akurat persentase kesempatan diterima vs risiko gagal berdasarkan kuota prodi, rasio jalur masuk, dan nilai Anda.
+            </small>
+          </div>
+          <span class="simulasi-badge">Terintegrasi Docker BE & Webhook n8n</span>
+        </div>
+
+        <form id="simulasiForm" class="simulasi-grid">
+          <div class="simulasi-field">
+            <label for="inputNama">Nama Calon Mahasiswa</label>
+            <input type="text" id="inputNama" placeholder="Ketik nama Anda..." required />
+          </div>
+
+          <div class="simulasi-field">
+            <label for="inputEmail">Email Aktif (Webhook n8n)</label>
+            <input type="email" id="inputEmail" placeholder="nama@email.com" required />
+          </div>
+
+          <div class="simulasi-field">
+            <label for="inputProdi">Pilih Program Studi (16 Prodi)</label>
+            <select id="inputProdi" required>
+              <optgroup label="Jurusan Desain">
+                <option value="D3 Desain Grafis">D3 Desain Grafis</option>
+                <option value="D4 Desain Mode">D4 Desain Mode</option>
+                <option value="D4 Teknologi Rekayasa Multimedia">D4 Teknologi Rekayasa Multimedia</option>
+                <option value="D4 Teknologi Permainan">D4 Teknologi Permainan</option>
+                <option value="D4 Animasi">D4 Animasi</option>
+              </optgroup>
+              <optgroup label="Jurusan Komunikasi">
+                <option value="D3 Penerbitan">D3 Penerbitan</option>
+                <option value="D3 Fotografi">D3 Fotografi</option>
+                <option value="D3 Periklanan">D3 Periklanan</option>
+                <option value="D3 Penyiaran">D3 Penyiaran</option>
+                <option value="D4 Produksi Film & TV">D4 Produksi Film & TV</option>
+              </optgroup>
+              <optgroup label="Jurusan Teknologi Industri">
+                <option value="D3 Teknik Grafika">D3 Teknik Grafika</option>
+                <option value="D3 Pemeliharaan Mesin">D3 Pemeliharaan Mesin</option>
+                <option value="D4 Teknologi Rekayasa Pengemasan">D4 Teknologi Rekayasa Pengemasan</option>
+              </optgroup>
+              <optgroup label="Jurusan Pariwisata">
+                <option value="D3 Seni Kuliner">D3 Seni Kuliner</option>
+                <option value="D4 Pengelolaan Perhotelan">D4 Pengelolaan Perhotelan</option>
+              </optgroup>
+            </select>
+          </div>
+
+          <div class="simulasi-field">
+            <label for="inputJalur">Jalur Seleksi</label>
+            <select id="inputJalur" required>
+              <option value="SNBP">Jalur SNBP (Prestasi Rapor)</option>
+              <option value="SNBT">Jalur SNBT (Skor Tes UTBK)</option>
+              <option value="Mandiri">Jalur Mandiri Reguler</option>
+            </select>
+          </div>
+
+          <div class="simulasi-field">
+            <label for="inputNilai">Rata-rata Rapor (70-100) / Skor UTBK (300-800)</label>
+            <input type="number" id="inputNilai" placeholder="Contoh: 86 atau 580" min="1" max="1000" step="0.1" required />
+          </div>
+
+          <button type="submit" class="simulasi-btn">Cek Peluang Saya</button>
+        </form>
+
+        <div id="hasilSimulasi" class="simulasi-result"></div>
+      </section>
+
+      <!-- AREA DASHBOARD UTAMA -->
       <section id="app">
-        <!-- Isi dashboard akan dirender dari js/main.js -->
+        <!-- Dirender otomatis oleh js/main.js -->
       </section>
     </main>
   </section>
 
-  <!-- JavaScript -->
+  <!-- Script Data & Logika Dashboard -->
   <script src="js/data_funnel.js"></script>
   <script src="js/main.js"></script>
 </body>
