@@ -1,5 +1,4 @@
-export default async function handler(req, res) {
-  // Izinkan akses dari browser (CORS)
+module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -9,12 +8,10 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Gunakan method POST" });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   const payload = req.body;
-
-  // Ambil alamat Webhook n8n dari pengaturan Environment Variable Vercel
   const webhookUrl = process.env.N8N_WEBHOOK_URL;
 
   let n8nTerhubung = false;
@@ -27,7 +24,7 @@ export default async function handler(req, res) {
       });
       n8nTerhubung = response.ok;
     } catch (err) {
-      console.error("Gagal menghubungi Webhook n8n:", err.message);
+      console.error("Gagal kirim ke n8n:", err.message);
     }
   }
 
@@ -36,4 +33,4 @@ export default async function handler(req, res) {
     n8n_sent: n8nTerhubung,
     data: payload
   });
-}
+};
