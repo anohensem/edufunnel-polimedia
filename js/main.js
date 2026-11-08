@@ -781,9 +781,9 @@ function setupCalculatorForm() {
 
     let statusWebhook = "Dihitung dengan Mesin Analitik Polimedia (Aktifkan Docker di port 4000 untuk memicu Webhook n8n)";
     try {
-      // Otomatis deteksi apakah sedang berjalan di Laptop (Lokal) atau sudah di Vercel
-      const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
-      const apiUrl = isLocal ? "http://localhost:4000/api/hitung-peluang" : "/api/hitung-peluang";
+      // Tembak LANGSUNG ke Cloudflare, jangan lewat localhost atau Vercel API
+      // Ganti link di bawah ini dengan link Cloudflare Tunnel Anda sendiri
+      const apiUrl = "https://gas-proposition-personals-jump.trycloudflare.com/webhook/prediksi-polimedia";
 
       const resp = await fetch(apiUrl, {
         method: "POST",
@@ -795,11 +795,14 @@ function setupCalculatorForm() {
           persentase_tidak_lolos: `${peluangTidakLolos}%`
         })
       });
+
       if (resp.ok) {
         statusWebhook = "✓ Data berhasil diproses Server & dikirim ke Webhook n8n!";
+      } else {
+        statusWebhook = "⚠ Peringatan: Webhook n8n belum merespon.";
       }
-    } catch (_) {
-      // Tetap lanjut menggunakan hasil akurat
+    } catch (err) {
+      statusWebhook = "⚠ Gagal menghubungi Webhook n8n. Pastikan Tunnel aktif.";
     }
 
     boxHasil.style.display = "block";
